@@ -1,0 +1,811 @@
+:root {
+    --primary-color: #1b1b1b;
+    --secondary-color: #d12a00;
+    --background-color: #f5f5f5;
+    --panel-bg: #ffffff;
+    --text-color: #333333;
+    --border-color: #dddddd;
+    --highlight-color: #e74c3c;
+    --success-color: #2ecc71;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+#app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100%;
+}
+
+header {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 10px;
+    background-color: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+}
+
+.header-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 10px;
+    width: 100%;
+
+}
+
+.company-logo {
+    display: flex;
+    align-items: center;
+}
+
+#company-logo {
+    height: auto;
+    margin-right: 15px;
+}
+
+.header-title {
+    margin: 0;
+}
+
+.header-title h1 {
+    margin: 0;
+    font-size: 1.6rem;
+}
+
+.header-controls-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.auth-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.view-toggle {
+    display: flex;
+    gap: 5px;
+}
+
+.inner-container {    
+   flex-direction: row;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .header-container {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .header-controls-wrapper {
+        width: 100%;
+        margin-top: 5px;
+        justify-content: space-between;
+    }
+}
+
+.header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+.company-logo {
+    flex: 1;
+    display: flex;
+    align-items: center;
+}
+
+.company-logo img {
+    max-height: 100px;
+    max-width: 150px;
+}
+
+.header-title {
+    flex: 2;
+    text-align: center;
+}
+
+.header-right {
+    flex: 1;
+}
+
+.header-controls {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 10px;
+}
+
+.auth-section {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+}
+
+.view-toggle {
+    display: flex;
+    justify-content: flex-end;
+    gap: 5px;
+}
+
+h1 {
+    font-size: 1.5rem;
+    font-weight: 500;
+}
+
+.main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+aside.control-panel {
+    width: 300px;
+    background-color: var(--panel-bg);
+    border-right: 1px solid var(--border-color);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    overflow-y: auto;
+}
+
+.search-container, .tools-container, .properties-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+#search-input {
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.search-results {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin-top: 0.5rem;
+    display: none;
+}
+
+.search-results.active {
+    display: block;
+}
+
+.search-result-item {
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+}
+
+.search-result-item:hover {
+    background-color: #f0f0f0;
+}
+
+.search-result-item:last-child {
+    border-bottom: none;
+}
+
+.tool-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+}
+
+.tool-btn {
+    padding: 0.5rem;
+    background-color: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tool-btn.active {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.canvas-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background-color: #e0e0e0;
+}
+
+.canvas-controls {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    z-index: 10;
+}
+
+.canvas-controls button {
+    width: 40px;
+    height: 40px;
+    border-radius: 4px;
+    background-color: white;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#save-layout, #load-layout, #reset-view {
+    width: auto;
+    padding: 0 0.75rem;
+}
+
+#canvas-wrapper {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+}
+
+canvas.active {
+    display: block;
+}
+
+/* Enhanced hover info styles with photo support */
+.hover-info {
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.75rem;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+    display: none;
+    z-index: 1000;
+    max-width: 300px;
+    pointer-events: none; /* Allow mouse events to pass through */
+    transition: opacity 0.2s ease; /* Smooth fade in/out */
+    font-size: 14px;
+}
+
+.hover-info .user-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.hover-info .user-photo-container {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid var(--primary-color);
+    display: flex; /* Added to ensure proper alignment */
+    align-items: center; /* Center vertically */
+    justify-content: center; /* Center horizontally */
+}
+
+.hover-info .user-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block; /* Ensure proper display */
+}
+
+.hover-info .user-photo-placeholder {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: bold;
+    border: 2px solid var(--primary-color);
+}
+
+.hover-info .user-details {
+    text-align: center;
+    width: 100%;
+}
+
+.hover-info h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--primary-color);
+}
+
+.hover-info .user-email {
+    margin: 4px 0;
+    font-size: 13px;
+    color: var(--text-color);
+    word-break: break-all;
+}
+
+.hover-info .user-department {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-color-light);
+}
+
+.hover-info .object-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.hover-info .desk-info h3,
+.hover-info .wall-info h3 {
+    color: var(--text-color-dark);
+}
+
+.hover-info .desk-info p,
+.hover-info .wall-info p {
+    margin: 2px 0;
+    color: var(--text-color);
+}
+
+button {
+    font-family: inherit;
+}
+
+button:hover:not(:disabled) {
+    opacity: 0.9;
+}
+
+button:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+#login-button, #logout-button {
+    padding: 0.5rem 1rem;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#logout-button {
+    background-color: var(--highlight-color);
+}
+
+/* Update the left sidebar layout */
+.left-sidebar {
+    width: 280px;
+    padding: 1rem;
+    background-color: var(--bg-color-light);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    height: calc(100vh - var(--header-height));
+}
+
+/* Modal styles */
+#modal-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2000;
+    pointer-events: none;
+}
+
+.modal {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+    width: 500px;
+    max-width: 90%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    pointer-events: auto;
+    overflow: hidden;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: var(--text-color-dark);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    color: var(--text-color-light);
+}
+
+.modal-close:hover {
+    color: var(--text-color-dark);
+}
+
+.modal-body {
+    padding: 1rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-search {
+    margin-bottom: 1rem;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.modal-search-input {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.modal-department-filter {
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    min-width: 150px;
+}
+
+.modal-user-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.modal-user-item {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.modal-user-item:hover {
+    background-color: var(--hover-color);
+}
+
+.modal-user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    margin-right: 1rem;
+    flex-shrink: 0;
+}
+
+.modal-user-avatar.with-photo {
+    padding: 0;
+    overflow: hidden;
+    background-color: transparent;
+}
+
+.modal-user-avatar.with-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.modal-user-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.modal-user-name {
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.modal-user-email,
+.modal-user-dept {
+    font-size: 0.9rem;
+    color: var(--text-color-light);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Context menu styles */
+.context-menu {
+    position: absolute;
+    background-color: white;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+    min-width: 150px;
+    z-index: 2000;
+    pointer-events: auto;
+}
+
+.context-menu-item {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background-color 0.2s ease;
+}
+
+.context-menu-item i {
+    width: 20px;
+    text-align: center;
+    color: var(--text-color-light);
+}
+
+.context-menu-item:hover {
+    background-color: var(--hover-color);
+}
+
+.context-menu-separator {
+    height: 1px;
+    background-color: var(--border-color);
+    margin: 0.25rem 0;
+}
+/* Add confirmation modal styles */
+.modal-footer {
+    padding: 1rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.btn {
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    border: 1px solid var(--border-color);
+    background-color: #fff;
+    transition: all 0.2s ease;
+}
+
+.btn:hover {
+    filter: brightness(0.95);
+}
+
+.btn-secondary {
+    background-color: #f0f0f0;
+    color: var(--text-color);
+}
+
+.btn-danger {
+    background-color: #e74c3c;
+    color: white;
+    border-color: #c0392b;
+}
+
+.btn-danger:hover {
+    background-color: #c0392b;
+}
+
+.confirmation-modal .modal-body p {
+    margin: 0.5rem 0;
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+/* Add pointer cursor to modal close button */
+.modal-close {
+    cursor: pointer;
+}
+/* Loading indicator styles */
+.loading-indicator-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 2100;
+}
+
+.loading-spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid var(--primary-color);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin-bottom: 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading-message {
+    font-size: 1rem;
+    color: var(--text-color-dark);
+}
+
+.error-message {
+    color: #e74c3c;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.retry-btn {
+    display: block;
+    margin: 0 auto;
+}
+
+/* Three.js canvas container */
+#canvas-3d-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #f5f5f5;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+}
+
+/* For when 3D view is fullscreen */
+#canvas-3d-container.fullsize {
+    height: 100%;
+}
+
+/* Make sure Three.js canvas is properly sized */
+#canvas-3d-container canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+}
+
+/* Custom cursor for 3D controls */
+#canvas-3d-container.rotate-tool canvas {
+    cursor: move;
+}
+#canvas-3d-container.pan-tool canvas {
+    cursor: grab;
+}
+#canvas-3d-container.pan-tool canvas:active {
+    cursor: grabbing;
+}
+/* 3D control styles */
+.three-controls {
+    display: none;
+    margin-top: 1rem;
+}
+
+.mode-3d .three-controls,
+.mode-both .three-controls {
+    display: flex;
+}
+
+.three-controls .control-btn {
+    font-size: 1rem;
+    padding: 0.25rem 0.5rem;
+}
+
+/* Screenshot button */
+.screenshot-btn {
+    margin-left: auto;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    display: none;
+}
+
+.screenshot-btn:hover {
+    background-color: var(--primary-color-dark);
+}
+
+.mode-3d .screenshot-btn,
+.mode-both .screenshot-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.screenshot-btn i {
+    font-size: 1rem;
+}
+/* Rotation controls */
+.rotation-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.rotate-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background-color: #f5f5f5;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.rotate-btn:hover {
+    background-color: #e0e0e0;
+}
+
+.rotate-btn i {
+    font-size: 0.9rem;
+    color: #333;
+}
+
+.unit-label {
+    font-size: 0.9rem;
+    color: #777;
+}
+
+#desk-rotation {
+    width: 60px;
+    text-align: center;
+}

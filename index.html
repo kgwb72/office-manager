@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Office Seating Plan</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app-container">
+        <header>
+            <div class="header-container">
+                <div class="company-logo">
+                    <img src="images/ZGP_Logo_pos.png" alt="Company Logo" id="company-logo">
+                </div>
+                <div class="header-title">
+                    <h1>Office Seating Plan</h1>
+                </div>
+                <div class="header-controls-wrapper" >
+                    <div class="auth-section inner-container">
+                        <span id="user-info">Logged in as: <span id="username">kgwb72</span></span>
+                        <button id="login-button">Login with Entra ID</button>
+                        <button id="logout-button" >Logout</button>
+                    </div>
+                    <div class="view-toggle inner-container">
+                        <button id="toggle-2d" class="active" class="tool-btn">2D View</button>
+                        <button id="toggle-3d" class="tool-btn">3D View</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <aside class="control-panel">
+                <div class="search-container">
+                    <h3>Search Users</h3>
+                    <input type="text" id="search-input" placeholder="Search by name or ID...">
+                    <div id="search-results" class="search-results"></div>
+                </div>
+                
+                <div class="tools-container">
+                    <h3>Tools</h3>
+                    <div class="tool-buttons">
+                        <button id="add-desk" class="tool-btn">Add Desk</button>
+                        <button id="add-seat" class="tool-btn">Add Seat</button>
+                        <button id="add-seat-desk" class="tool-btn">Add Seat with Desk</button>
+                        <button id="add-wall" class="tool-btn">Add Wall</button>
+                        <button id="select-tool" class="tool-btn active">Select</button>
+                        <button id="delete-tool" class="tool-btn">Delete</button>
+                    </div>
+                </div>
+                
+                <div class="properties-panel">
+                    <h3>Properties</h3>
+                    <div id="object-properties">
+                        <p>Select an object to edit properties</p>
+                    </div>
+                </div>
+                <!-- Add this to the left sidebar, after the saved layouts section -->
+                <div class="sidebar-section">
+                    <h3>Server Layouts</h3>
+                    <div class="layout-actions">
+                        <button id="save-to-server-btn" class="action-btn">
+                            <i class="fas fa-cloud-upload-alt"></i> Save to Server
+                        </button>
+                        <button id="refresh-server-layouts-btn" class="action-btn">
+                            <i class="fas fa-sync"></i> Refresh
+                        </button>
+                    </div>
+                    <div id="server-layouts-list" class="layouts-list">
+                        <div class="empty-list" id="no-server-layouts-message">No layouts found on server</div>
+                    </div>
+                </div>
+                <div class="sidebar-section">
+                    <h3>2D Layout</h3>
+                    <div class="layout-actions">
+                        <!-- Add these buttons to your toolbar -->
+                        <button id="upload-svg-bg" class="tool-btn" title="Upload SVG Background">Upload SVG Background
+                            <i class="fas fa-file-upload"></i>
+                        </button>
+                        <button id="remove-svg-bg" class="tool-btn" title="Remove SVG Background">Remove SVG Background
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                        <img id="svg-bg-preview" class="svg-bg-preview" src="layouts/EG.svg" alt="SVG Background Preview">
+                    </div>
+                    
+                </div>
+            </aside>
+
+            <div class="canvas-container mode-both">
+                <div class="canvas-controls">
+                    <button id="zoom-in">+</button>
+                    <button id="zoom-out">-</button>
+                    <button id="reset-view">Reset View</button>
+                    <button id="save-layout">Save Layout</button>
+                    <button id="load-layout">Load Layout</button>
+                </div>
+                
+                <div id="canvas-wrapper">
+                    <canvas id="canvas-2d" class="active"></canvas>
+                    <canvas id="canvas-3d-container"></canvas>
+                </div>
+                
+                <div id="hover-info" class="hover-info"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load core app scripts -->
+    <!-- <script src="js/config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/events.js"></script> -->
+    <script src="js/models.js"></script>
+   
+    <!-- Load 2D functionality -->
+    <script src="js/canvas2d.js"></script>
+    
+    <!-- Load 3D functionality -->
+    <!-- <script src="js/canvas3d.js"></script> -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/4.5.0/fabric.min.js"></script>
+    <!-- Add this to the head section of your HTML file, before your other scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+    
+    
+    <!-- Load authentication
+    <script src="js/auth.js"></script>
+    <script src="js/modals.js"></script> -->
+    <!-- Main application -->
+    <script src="js/app.js"></script>
+</body>
+</html>
