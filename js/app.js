@@ -5,7 +5,7 @@
 class App {
     constructor() {
         // Core properties
-        let keyboardCtrl = false;
+        this.keyboardCtrl = false;
         this.canvas2d = null;
         this.canvas3d = null;
         this.activeMode = '2d'; // Default to 2D mode
@@ -97,12 +97,21 @@ class App {
         document.getElementById('upload-svg-bg').addEventListener('click', () => this.loadSvgBackground());
         document.getElementById('remove-svg-bg').addEventListener('click', () => this.removeSvgBackground());
 
+        // In your setupEventListeners() function:
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Control') {
-              this.keyboardCtrl = true;
+                this.keyboardCtrl = true;
+                
+                // If we're currently drawing a wall, update the preview
+                if (this.wallDrawingStartPoint && this.lastMouseMoveEvent) {
+                    this.wallPreviewHandler(this.lastMouseMoveEvent);
+                    
+                    // Show a temporary status message
+                    this.showStatusMessage('Angle snap: ON (15°)', 1500);
+                }
             }
             if(e.key === 'Delete' ){ 
-                const activeObjects  = this.canvas2d.getActiveObjects();                
+                const activeObjects = this.canvas2d.getActiveObjects();                
                 activeObjects.forEach(obj => {
                     this.canvas2d.remove(obj);
                 });            
@@ -110,18 +119,24 @@ class App {
             // Add escape key to cancel wall drawing
             if(e.key === 'Escape' && this.wallDrawingStartPoint) {
                 this.cancelWallDrawing();
-            }
-            console.log('Key pressed:', this.keyboardCtrl, e.key); 
-    });
+            }          
+        });
           
         document.addEventListener('keyup', (e) => {
             if (e.key === 'Control') {
-              this.keyboardCtrl = false;
+                this.keyboardCtrl = false;
+                
+                // If we're currently drawing a wall, update the preview
+                if (this.wallDrawingStartPoint && this.lastMouseMoveEvent) {
+                    this.wallPreviewHandler(this.lastMouseMoveEvent);
+                    
+                    // Show a temporary status message
+                    this.showStatusMessage('Angle snap: OFF', 1500);
+                }
             }
         });
         
-        console.log('Event listeners set up');
-        
+                
         // Add wheel event listener to the canvas element
         document.getElementById('canvas-2d').addEventListener('wheel', (e) => this.handleMouseWheel(e), { passive: false });
     }
@@ -392,7 +407,7 @@ class App {
         this.cleanupWallDrawingHandlers();
         
         // Angle snap settings
-        this.angleSnapEnabled = true; // Enable angle snapping by default
+        this.angleSnapEnabled = false; // Enable angle snapping by default
         this.angleSnapDegrees = 15; // Snap to multiples of 15 degrees
         
         // Mouse down handler for the first click (start point of wall)
@@ -402,7 +417,7 @@ class App {
             
             // Store the start point
             this.wallDrawingStartPoint = { x: pointer.x, y: pointer.y };
-            console.log('Wall drawing start point:', this.wallDrawingStartPoint);
+
             
             // Add a marker at the start point for better visualization
             const startMarker = new fabric.Circle({
@@ -499,6 +514,8 @@ class App {
             // Store original end point for reference
             let originalEndX = pointer.x;
             let originalEndY = pointer.y;
+
+            this.angleSnapEnabled = this.keyboardCtrl;
             
             // Apply angle snapping if enabled
             if (this.angleSnapEnabled) {
@@ -583,6 +600,9 @@ class App {
             let dy = pointer.y - this.wallDrawingStartPoint.y;
             let angle = Math.atan2(dy, dx) * (180 / Math.PI);
             let length = Math.sqrt(dx * dx + dy * dy);
+
+             // CHANGE: Check for Ctrl key to enable snapping
+            this.angleSnapEnabled = this.keyboardCtrl;
             
             // Apply angle snapping if enabled
             let endX = pointer.x;
