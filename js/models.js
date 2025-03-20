@@ -23,7 +23,7 @@ class OfficeObject {
     }
     
     // To be implemented by subclasses
-    createFabricObject(canvas) {
+    createFabricObject(canvas) {      
       throw new Error('Method must be implemented by subclass');
     }
     
