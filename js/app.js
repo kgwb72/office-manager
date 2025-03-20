@@ -5,12 +5,13 @@
 class App {
     constructor() {
         // Core properties
-        let keyboardCtrl = false;
+        this.keyboardCtrl = false; // Changed from let to this.keyboardCtrl to make it accessible throughout the class
         this.canvas2d = null;
         this.canvas3d = null;
         this.activeMode = '2d'; // Default to 2D mode
         this.selectedObject = null;
         this.objects = []; // Store all office objects
+        this.gridSize = 20; // Grid size for snapping (in pixels)
         
         // Initialize when DOM is ready
         document.addEventListener('DOMContentLoaded', () => this.init());
@@ -92,22 +93,34 @@ class App {
         document.getElementById('upload-svg-bg').addEventListener('click', () => this.loadSvgBackground());
         document.getElementById('remove-svg-bg').addEventListener('click', () => this.removeSvgBackground());
 
+        // Add event listener for object movement to implement snapping
+        this.canvas2d.on('object:moving', (e) => {
+            if (e.target && e.target.type === 'rect' && e.target.officeObject && e.target.officeObject.type === 'wall') {
+                // Only apply snapping when Ctrl key is pressed
+                if (this.keyboardCtrl) {
+                    this.snapObjectToGrid(e.target);
+                }
+            }
+        });
+
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Control') {
-              this.keyboardCtrl = true;
+                this.keyboardCtrl = true;
+                console.log('Snapping activated');
             }
             if(e.key === 'Delete' ){ 
-                const activeObjects  = this.canvas2d.getActiveObjects();                
+                const activeObjects = this.canvas2d.getActiveObjects();                
                 activeObjects.forEach(obj => {
                     this.canvas2d.remove(obj);
                 });            
             }
             console.log('Key pressed:', this.keyboardCtrl, e.key); 
-    });
+        });
           
         document.addEventListener('keyup', (e) => {
             if (e.key === 'Control') {
-              this.keyboardCtrl = false;
+                this.keyboardCtrl = false;
+                console.log('Snapping deactivated');
             }
         });
         
@@ -117,6 +130,19 @@ class App {
         document.getElementById('canvas-2d').addEventListener('wheel', (e) => this.handleMouseWheel(e), { passive: false });
     }
     
+    /**
+     * Snap an object to the grid
+     * @param {fabric.Object} obj - The fabric object to snap
+     */
+    snapObjectToGrid(obj) {
+        // Calculate the nearest grid position
+        const gridSize = this.gridSize;
+        obj.set({
+            left: Math.round(obj.left / gridSize) * gridSize,
+            top: Math.round(obj.top / gridSize) * gridSize
+        });
+    }
+
     /**
      * Convert screen coordinates to canvas world coordinates
      */
@@ -249,7 +275,16 @@ class App {
                 // Create a one-time event handler for mouse:down
                 const addWallHandler = (e) => {
                     console.log('Mouse down event:', e);
-                    this.addWall('wall_' + Date.now(), e.e.offsetX, e.e.offsetY, 100, 50);
+                    let x = e.e.offsetX;
+                    let y = e.e.offsetY;
+                    
+                    // Apply snapping to initial placement if Ctrl is pressed
+                    if (this.keyboardCtrl) {
+                        x = Math.round(x / this.gridSize) * this.gridSize;
+                        y = Math.round(y / this.gridSize) * this.gridSize;
+                    }
+                    
+                    this.addWall('wall_' + Date.now(), x, y, 100, 50);
                     // Remove this event handler after first use
                     this.canvas2d.off('mouse:down', addWallHandler);
                     // Switch back to select tool
@@ -361,7 +396,6 @@ class App {
                 photoUrl
             ));
         }
-        
         return users;
     }
     /**
@@ -369,7 +403,6 @@ class App {
  */
     loadSvgBackground() {
         
-
         const svgUrl = localStorage.getItem[0];
         console.log(svgUrl);
   
@@ -467,6 +500,48 @@ class App {
         
         localStorage.removeItem('layoutSvgBackground');
         console.log('SVG background removed');
+    }
+
+    /**
+     * Get the snap status - whether snapping is active based on Ctrl key
+     * @returns {boolean} True if snapping is active
+     */
+    isSnappingActive() {
+        return this.keyboardCtrl;
+    }
+
+    /**
+     * Show a temporary indicator that snapping is active
+     */
+    showSnappingIndicator() {
+        // Create a text element to show snapping status
+        const snappingText = document.getElementById('snapping-indicator');
+        if (!snappingText) {
+            const indicator = document.createElement('div');
+            indicator.id = 'snapping-indicator';
+            indicator.style.position = 'absolute';
+            indicator.style.top = '10px';
+            indicator.style.right = '10px';
+            indicator.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+            indicator.style.color = 'white';
+            indicator.style.padding = '5px 10px';
+            indicator.style.borderRadius = '3px';
+            indicator.style.zIndex = '1000';
+            indicator.style.transition = 'opacity 0.3s';
+            indicator.textContent = 'Snapping Enabled';
+            document.body.appendChild(indicator);
+            
+            // Fade out after 2 seconds
+            setTimeout(() => {
+                indicator.style.opacity = '0';
+                // Remove after fade out
+                setTimeout(() => {
+                    if (indicator.parentNode) {
+                        indicator.parentNode.removeChild(indicator);
+                    }
+                }, 300);
+            }, 2000);
+        }
     }
 }
 

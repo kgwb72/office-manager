@@ -125,6 +125,206 @@ class OfficeObject {
     }
   }
 
+  class Desk extends OfficeObject {
+    constructor(id, position, rotation, options = {}) {
+      // Default dimensions for desk with chair
+      const dimensions = {
+        width: options.width || 160,  // desk width
+        height: options.height || 75, // desk height
+        depth: options.depth || 80,   // desk depth
+       
+      };
+      
+      super(id, 'desk', position, rotation, dimensions, options);
+      
+      this.deskColor = options.deskColor || '#8B4513'; // Brown by default
+      this.chairColor = options.chairColor || '#4169E1'; // Royal Blue by default
+    }
+    
+    createFabricObject(canvas) {
+      // Create desk (rectangle)
+      const desk = new fabric.Rect({
+        width: this.dimensions.width,
+        height: this.dimensions.depth,  // Depth is used as height in 2D
+        fill: this.deskColor,
+        originX: 'center',
+        originY: 'center'
+      });
+      
+     
+      // Group desk and chair
+      this.fabricObject = new fabric.Group([desk], {
+        left: this.position.x,
+        top: this.position.z,  // Use z for top position in 2D
+        angle: this.rotation.y * (180 / Math.PI),
+        hasControls: true,
+        hasBorders: false,
+        lockScalingX: true,
+        lockScalingY: true,
+        selectable: true,     
+        transparentCorners: false
+      });
+      
+      // Hide all controls except for rotation control
+      this.fabricObject.setControlsVisibility({
+        tl: false,
+        tr: false,
+        br: false,
+        bl: false,
+        ml: false,
+        mt: false,
+        mr: false,
+        mb: false,
+        mtr: true  // Only keep rotation control visible
+      });
+      
+
+      // Add custom properties
+      this.fabricObject.officeObject = this;
+      
+      // Add event listeners
+      this.fabricObject.on('moving', () => {
+        this.position.x = this.fabricObject.left;
+        this.position.z = this.fabricObject.top;
+        this.updateThreeFromFabric();
+      });
+      
+      this.fabricObject.on('rotating', () => {
+        // Get the raw angle from fabric object        
+        let angle = this.fabricObject.angle;
+   
+        // Convert to radians for the 3D object
+        this.fabricObject.angle = angle;
+        this.rotation.y = angle * (Math.PI / 180);
+        this.updateThreeFromFabric();
+      });
+
+      this.fabricObject.on('mouseover', () => {
+        // Store original origin point
+        const origOriginX = this.fabricObject.originX;
+        const origOriginY = this.fabricObject.originY;
+        
+        // Set origin to center for scaling from center
+        this.fabricObject.set({
+          originX: 'center',
+          originY: 'center',
+          // scaleX: 1.1,
+          // scaleY: 1.1,
+          opacity: 0.8,
+          shadow: new fabric.Shadow({
+        color: 'rgba(99, 132, 179, 0.7)',       
+        blur: 15,
+        offsetX: 0,
+        offsetY: 0
+          })
+        });
+        
+        // Reset origin to original values
+        this.fabricObject.set({
+          originX: origOriginX,
+          originY: origOriginY
+        });
+        
+        // Highlight object
+        this.setHovered(true);
+        
+        this.fabricObject.canvas?.renderAll();
+      });
+      
+      this.fabricObject.on('mouseout', () => {
+        // Store original origin point
+        const origOriginX = this.fabricObject.originX;
+        const origOriginY = this.fabricObject.originY;
+        
+        // Set origin to center for scaling from center
+        this.fabricObject.set({
+          originX: 'center',
+          originY: 'center',
+          opacity: 1,
+          scaleX: 1,
+          scaleY: 1,
+          shadow: null
+        });
+        
+        // Reset origin to original values
+        this.fabricObject.set({
+          originX: origOriginX,
+          originY: origOriginY
+        });
+        
+        // Remove highlight
+        this.setHovered(false);
+        
+        this.fabricObject.canvas?.renderAll();
+      });
+      
+      this.fabricObject.on('selected', () => {
+        this.select();
+      });
+      
+      this.fabricObject.on('deselected', () => {
+        this.deselect();
+      });    
+
+      this.fabricObject.on('deleted', () => {
+        // Remove from scene
+        this.remove(canvas, null);
+      });
+      // Add to canvas
+      canvas.add(this.fabricObject);
+      return this.fabricObject;
+    }
+    
+    createThreeObject(scene) {
+      const group = new THREE.Group();
+      
+      // Create desk (box)
+      const deskGeometry = new THREE.BoxGeometry(
+        this.dimensions.width, 
+        this.dimensions.height, 
+        this.dimensions.depth
+      );
+      const deskMaterial = new THREE.MeshPhongMaterial({ color: this.deskColor });
+      const desk = new THREE.Mesh(deskGeometry, deskMaterial);
+      
+      // Position desk with its bottom at floor level
+      desk.position.y = this.dimensions.height / 2;      
+    
+    
+      // Add all components to the group
+      group.add(desk);   
+      
+      // Position and rotate group
+      group.position.set(this.position.x, this.position.y, this.position.z);
+      group.rotation.set(this.rotation.x, this.rotation.y, this.rotation.z);
+      
+      // Store reference and add to scene
+      this.threeObject = group;
+      scene.add(group);
+      
+      // Add custom property for raycasting
+      this.threeObject.officeObject = this;
+      
+      return this.threeObject;
+    }
+    
+    // Custom method to highlight when hovered
+    setHovered(isHovered) {
+      if (this.threeObject) {
+        // Traverse all children (desk and chair parts)
+        this.threeObject.traverse((child) => {
+          if (child.isMesh) {
+            if (isHovered) {
+              child.material.emissive.set(0x555555);
+            } else {
+              child.material.emissive.set(0x000000);
+            }
+          }
+        });
+      }
+    }
+  }
+
   class DeskWithChair extends OfficeObject {
     constructor(id, position, rotation, options = {}) {
       // Default dimensions for desk with chair
@@ -366,90 +566,128 @@ class OfficeObject {
 
   class Wall extends OfficeObject {
     constructor(id, position, rotation, dimensions, options = {}) {
-      super(id, 'wall', position, rotation, dimensions, options);
-      this.wallColor = options.color || '#e8e8e8'; // Light gray by default
+        super(id, 'wall', position, rotation, dimensions, options);
+        this.wallColor = options.color || '#414141'; // Light gray by default
+        this.wallThickness = options.thickness || 10; // Default wall thickness
+        this.wallOpacity = options.opacity || 1.0; // Default opacity
+        console.log(this.wallColor)
     }
     
     createFabricObject(canvas) {
-      // Create wall as rectangle
-      this.fabricObject = new fabric.Rect({
-        left: this.position.x,
-        top: this.position.z,
-        width: this.dimensions.width,
-        height: this.dimensions.depth, // Using depth as height in 2D view
-        fill: this.wallColor,
-        angle: this.rotation.y * (180 / Math.PI),
-        hasControls: true,
-        hasBorders: true,
-        lockScalingX: options.lockScalingX || false,
-        lockScalingY: options.lockScalingY || false,
-        selectable: true
-      });
-      
-      // Add custom property
-      this.fabricObject.officeObject = this;
-      
-      // Add event listeners
-      this.fabricObject.on('moving', () => {
-        this.position.x = this.fabricObject.left;
-        this.position.z = this.fabricObject.top;
-        this.updateThreeFromFabric();
-      });
-      
-      this.fabricObject.on('rotating', () => {
-        this.rotation.y = this.fabricObject.angle * (Math.PI / 180);
-        this.updateThreeFromFabric();
-      });
-      
-      this.fabricObject.on('scaling', () => {
-        this.dimensions.width = this.fabricObject.width * this.fabricObject.scaleX;
-        this.dimensions.depth = this.fabricObject.height * this.fabricObject.scaleY;
-        this.updateThreeFromFabric();
-        
-        // Reset scaling factors to avoid compounding
-        this.fabricObject.set({
-          width: this.dimensions.width,
-          height: this.dimensions.depth,
-          scaleX: 1,
-          scaleY: 1
+        // Create wall as rectangle
+        this.fabricObject = new fabric.Rect({
+            left: this.position.x,
+            top: this.position.z,
+            width: this.dimensions.width,
+            height: this.dimensions.depth || this.wallThickness, // Using depth as height in 2D view
+            fill: this.wallColor,
+            opacity: this.wallOpacity,
+            originX: 'center', // Set origin to center
+            originY: 'center', // Set origin to center
+            angle: this.rotation.y * (180 / Math.PI),
+            hasControls: true,
+            hasBorders: true,
+            lockScalingY: true, // Lock the thickness/height of the wall
+            selectable: true,
+            cornerColor: '#38A3D8', // Blue corner handles
+            cornerSize: 8,
+            transparentCorners: false
         });
-      });
-      
-      // Add to canvas
-      canvas.add(this.fabricObject);
-      return this.fabricObject;
-    }
-    
-    createThreeObject(scene) {
-      // Create wall as box
-      const geometry = new THREE.BoxGeometry(
-        this.dimensions.width,
-        this.dimensions.height,
-        this.dimensions.depth
-      );
-      const material = new THREE.MeshPhongMaterial({
-        color: this.wallColor,
-        transparent: this.options.transparent || false,
-        opacity: this.options.opacity || 1.0
-      });
-      
-      this.threeObject = new THREE.Mesh(geometry, material);
-      
-      // Position with bottom at floor level
-      this.threeObject.position.set(
-        this.position.x,
-        this.dimensions.height / 2, // Bottom at y=0
-        this.position.z
-      );
-      
-      this.threeObject.rotation.set(this.rotation.x, this.rotation.y, this.rotation.z);
-      
-      // Add custom property for raycasting
-      this.threeObject.officeObject = this;
-      
-      // Add to scene
-      scene.add(this.threeObject);
-      return this.threeObject;
+        
+        // Add custom property
+        this.fabricObject.officeObject = this;
+        
+        // Add event listeners
+        this.fabricObject.on('moving', () => {
+            this.position.x = this.fabricObject.left;
+            this.position.z = this.fabricObject.top;
+            this.updateThreeFromFabric();
+        });
+        
+        this.fabricObject.on('rotating', () => {
+            this.rotation.y = this.fabricObject.angle * (Math.PI / 180);
+            this.updateThreeFromFabric();
+        });
+        
+        this.fabricObject.on('scaling', () => {
+            // Only allow scaling of width (length of wall), not height (thickness)
+            this.dimensions.width = this.fabricObject.width * this.fabricObject.scaleX;
+            this.updateThreeFromFabric();
+            
+            // Reset scaling factors to avoid compounding
+            this.fabricObject.set({
+                width: this.dimensions.width,
+                scaleX: 1,
+                scaleY: 1
+            });
+        });
+        
+        // Add hover effects similar to desk
+        this.fabricObject.on('mouseover', () => {
+            // Store original origin point
+            const origOriginX = this.fabricObject.originX;
+            const origOriginY = this.fabricObject.originY;
+            
+            // Set origin to center for scaling from center
+            this.fabricObject.set({
+                originX: 'center',
+                originY: 'center',
+                opacity: Math.min(this.wallOpacity + 0.1, 1.0),
+                shadow: new fabric.Shadow({
+                    color: 'rgba(99, 132, 179, 0.7)',       
+                    blur: 15,
+                    offsetX: 0,
+                    offsetY: 0
+                })
+            });
+            
+            // Reset origin to original values
+            this.fabricObject.set({
+                originX: origOriginX,
+                originY: origOriginY
+            });
+            
+            this.fabricObject.canvas?.renderAll();
+        });
+        
+        this.fabricObject.on('mouseout', () => {
+            // Store original origin point
+            const origOriginX = this.fabricObject.originX;
+            const origOriginY = this.fabricObject.originY;
+            
+            // Set origin to center for scaling from center
+            this.fabricObject.set({
+                originX: 'center',
+                originY: 'center',
+                opacity: this.wallOpacity,
+                shadow: null
+            });
+            
+            // Reset origin to original values
+            this.fabricObject.set({
+                originX: origOriginX,
+                originY: origOriginY
+            });
+            
+            this.fabricObject.canvas?.renderAll();
+        });
+        
+        this.fabricObject.on('selected', () => {
+            this.select();
+        });
+        
+        this.fabricObject.on('deselected', () => {
+            this.deselect();
+        });
+
+        this.fabricObject.on('deleted', () => {
+            // Remove from scene
+            this.remove(canvas, null);
+        });
+        
+        // Add to canvas
+        canvas.add(this.fabricObject);
+        return this.fabricObject;
     }
   }
   class User {
