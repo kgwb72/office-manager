@@ -48,13 +48,15 @@ class App {
             
             // Initialize canvases
             this.initializeCanvases();
+            
             // Initialize services
             this.initializeServices();            
 
             // Set up event listeners for UI controls
             this.setupEventListeners();
-            this.generateMockUsers();
             
+            // Generate mock data for development
+            this.generateMockUsers();
             
             console.log('Application initialized successfully');
         } catch (error) {
@@ -62,6 +64,9 @@ class App {
         }
     }
     
+    /**
+     * Initialize application services
+     */
     initializeServices() {
         // Initialize auth service
         this.authService = new AuthService();
@@ -113,6 +118,7 @@ class App {
         // Initialize file upload manager
         this.fileUploadManager = new FileUploadManager(this);
     }
+
     /**
      * Initialize the 2D and 3D canvases
      */
@@ -145,6 +151,9 @@ class App {
         // View toggle buttons
         document.getElementById('toggle-2d').addEventListener('click', () => this.setActiveMode('2d'));
         document.getElementById('toggle-3d').addEventListener('click', () => this.setActiveMode('3d'));
+        if (document.getElementById('toggle-360')) {
+            document.getElementById('toggle-360').addEventListener('click', () => this.setActiveMode('360'));
+        }
         
         // Zoom controls
         document.getElementById('zoom-in').addEventListener('click', () => this.zoomIn());
@@ -161,11 +170,33 @@ class App {
         document.getElementById('save-layout').addEventListener('click', () => this.saveLayout());
         document.getElementById('load-layout').addEventListener('click', () => this.loadLayout());
 
-        // In your setupEventListeners() function, add:
-        document.getElementById('upload-svg-bg').addEventListener('click', () => this.loadSvgBackground());
-        document.getElementById('remove-svg-bg').addEventListener('click', () => this.removeSvgBackground());
+        // Background SVG management
+        const uploadSvgBgBtn = document.getElementById('upload-svg-bg');
+        const removeSvgBgBtn = document.getElementById('remove-svg-bg');
+        
+        if (uploadSvgBgBtn) {
+            uploadSvgBgBtn.addEventListener('click', () => this.loadSvgBackground());
+        }
+        
+        if (removeSvgBgBtn) {
+            removeSvgBgBtn.addEventListener('click', () => this.removeSvgBackground());
+        }
 
-        // In your setupEventListeners() function:
+        // Set up canvas object event handlers
+        this.setupCanvasObjectEventHandlers();
+        
+        // Keyboard event handlers
+        this.setupKeyboardEventHandlers();
+        
+        // Add wheel event listener for zooming
+        document.getElementById('canvas-2d').addEventListener('wheel', (e) => this.handleMouseWheel(e), { passive: false });
+    }
+
+    /**
+     * Set up canvas object event handlers
+     */
+    setupCanvasObjectEventHandlers() {
+        // Object moving event handler
         this.canvas2d.on('object:moving', (e) => {
             const obj = e.target;
             
@@ -187,7 +218,7 @@ class App {
             }
         });
         
-        // Add event listeners for object rotation to check wall collisions
+        // Object rotation event handler
         this.canvas2d.on('object:rotating', (e) => {
             const obj = e.target;
             
@@ -204,7 +235,7 @@ class App {
             }
         });
 
-        // Object modified event (for updating 3D view and checking final positions)
+        // Object modification event handler
         this.canvas2d.on('object:modified', (e) => {
             const obj = e.target;
             if (!obj) return;
@@ -222,7 +253,7 @@ class App {
             }
         });
 
-        // Mouse move listener for wall drawing
+        // Mouse move for wall drawing
         this.canvas2d.on('mouse:move', (e) => {
             if (this.drawingWall && this.startPoint && this.tempWall) {
                 const pointer = this.canvas2d.getPointer(e.e);
@@ -260,7 +291,7 @@ class App {
             }
         });
 
-        // Mouse down listener for wall drawing start
+        // Mouse down for wall drawing start
         this.canvas2d.on('mouse:down', (e) => {
             if (this.activeWallDrawing && !this.drawingWall) {
                 const pointer = this.canvas2d.getPointer(e.e);
@@ -289,7 +320,7 @@ class App {
             }
         });
 
-        // Mouse up listener for wall drawing end
+        // Mouse up for wall drawing end
         this.canvas2d.on('mouse:up', (e) => {
             if (this.drawingWall && this.startPoint && this.tempWall) {
                 const pointer = this.canvas2d.getPointer(e.e);
@@ -343,8 +374,12 @@ class App {
                 }
             }
         });
+    }
 
-        // Keyboard event handlers
+    /**
+     * Set up keyboard event handlers
+     */
+    setupKeyboardEventHandlers() {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Control') {
                 this.keyboardCtrl = true;
@@ -393,17 +428,14 @@ class App {
                 }
             }
         });
-        
-        // Add wheel event listener for zooming
-        document.getElementById('canvas-2d').addEventListener('wheel', (e) => this.handleMouseWheel(e), { passive: false });
     }
 
-     /**
+    /**
      * Find the nearest wall endpoint within snapping threshold
      * @param {Object} point - The current pointer position {x, y}
      * @returns {Object} The snapped point or original point if no snap
      */
-     findNearestWallEndpoint(point) {
+    findNearestWallEndpoint(point) {
         const walls = this.canvas2d.getObjects().filter(obj => 
             obj.officeObject && obj.officeObject.type === 'wall'
         );
@@ -850,70 +882,45 @@ class App {
     /**
      * Handle mouse wheel events for zooming
      */
-    /**
-     * Handle mouse wheel events for zooming
-     */
-        handleMouseWheel(e) {
-            e.preventDefault();
-            
-            if (this.activeMode !== '2d' || !this.canvas2d) {
-                return;
-            }
-            
-            // Get mouse position in canvas coordinates before zoom
-            const pointer = this.screenToWorld(e.clientX, e.clientY);
-            
-            // Calculate zoom factor based on wheel direction
-            const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-            
-            // Get current zoom level and calculate new zoom level
-            const zoom = this.canvas2d.getZoom();
-            const newZoom = Math.max(0.2, Math.min(5, zoom * zoomFactor));
-            
-            // Set zoom with point as the center
-            this.canvas2d.zoomToPoint({ x: pointer.x, y: pointer.y }, newZoom);
-            
-            // Render the canvas with the new zoom
-            this.canvas2d.requestRenderAll();
+    handleMouseWheel(e) {
+        e.preventDefault();
+        
+        if (this.activeMode !== '2d' || !this.canvas2d) {
+            return;
         }
-    
+        
+        // Get mouse position in canvas coordinates before zoom
+        const pointer = this.screenToWorld(e.clientX, e.clientY);
+        
+        // Calculate zoom factor based on wheel direction
+        const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+        
+        // Get current zoom level and calculate new zoom level
+        const zoom = this.canvas2d.getZoom();
+        const newZoom = Math.max(0.2, Math.min(5, zoom * zoomFactor));
+        
+        // Set zoom with point as the center
+        this.canvas2d.zoomToPoint({ x: pointer.x, y: pointer.y }, newZoom);
+        
+        // Render the canvas with the new zoom
+        this.canvas2d.requestRenderAll();
+    }
     
     /**
-     * Convert screen coordinates to canvas world coordinates
-     */
-    screenToWorld(screenX, screenY) {
-        const canvas = document.getElementById('canvas-2d');
-        const rect = canvas.getBoundingClientRect();
-        const canvasX = screenX - rect.left;
-        const canvasY = screenY - rect.top;
-        
-        // Get inverse transform to convert from screen to canvas coordinates
-        const transform = this.canvas2d.viewportTransform;
-        const inverseTransform = fabric.util.invertTransform(transform);
-        
-        // Apply the inverse transform to get world coordinates
-        const point = fabric.util.transformPoint(
-            { x: canvasX, y: canvasY },
-            inverseTransform
-        );
-        
-        return point;
-    }
-
-    
-     /**
      * Add a desk with chair to the canvas
      */
-     addDeskWithChair(id, x, y, rotation = 0, options = {}) {
+    addDeskWithChair(id, x, y, rotation = 0, options = {}) {
         const position = { x, y, z: y }; // Use y as z for 3D positioning
         const rotationObj = { x: 0, y: rotation * Math.PI / 180, z: 0 };
         const deskWithChair = new DeskWithChair(id, position, rotationObj, options);
         const fabricObject = deskWithChair.createFabricObject(this.canvas2d);
         
         // Add collision handling attributes
-        fabricObject.lastValidLeft = fabricObject.left;
-        fabricObject.lastValidTop = fabricObject.top;
-        fabricObject.lastRotation = fabricObject.angle;
+        if (fabricObject) {
+            fabricObject.lastValidLeft = fabricObject.left;
+            fabricObject.lastValidTop = fabricObject.top;
+            fabricObject.lastRotation = fabricObject.angle;
+        }
         
         // Store in objects array
         this.objects.push(deskWithChair);
@@ -921,18 +928,21 @@ class App {
         return deskWithChair;
     }
 
-
-
+    /**
+     * Add a desk to the canvas
+     */
     addDesk(id, x, y, rotation = 0, options = {}) {
         const position = { x, y, z: y }; // Use y as z for 3D positioning
         const rotationObj = { x: 0, y: rotation * Math.PI / 180, z: 0 };
         const desk = new Desk(id, position, rotationObj, options);
-        desk.createFabricObject(this.canvas2d);
+        const fabricObject = desk.createFabricObject(this.canvas2d);
 
         // Add collision handling attributes
-        fabricObject.lastValidLeft = fabricObject.left;
-        fabricObject.lastValidTop = fabricObject.top;
-        fabricObject.lastRotation = fabricObject.angle;
+        if (fabricObject) {
+            fabricObject.lastValidLeft = fabricObject.left;
+            fabricObject.lastValidTop = fabricObject.top;
+            fabricObject.lastRotation = fabricObject.angle;
+        }
         
         // Store in objects array
         this.objects.push(desk);
@@ -941,32 +951,59 @@ class App {
     }
 
     /**
-     * Add a wall between two points
+     * Add a wall to the canvas
      */
-    addWall(id, startX, startY, endX, endY, options = {}) {
-        // Calculate wall dimensions and position
-        const width = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2)); // Length of the wall
+    addWall(id, startX, startY, width, height, options = {}) {
+        // Determine if this is a point-to-point wall drawing or dimensions-based
+        let position, dimensions;
         
-        // Calculate the midpoint between start and end points for proper positioning
-        const midX = (startX + endX) / 2;
-        const midY = (startY + endY) / 2;
+        if (typeof width === 'number' && typeof height === 'number') {
+            // Dimensions-based wall
+            position = { x: startX, y: 0, z: startY };
+            dimensions = { 
+                width: width,
+                height: options.height || 250, 
+                depth: height 
+            };
+        } else {
+            // Point-to-point wall drawing (endX = width, endY = height)
+            const endX = width;
+            const endY = height;
+            
+            // Calculate wall dimensions and position
+            const wallWidth = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+            
+            // Calculate the midpoint between start and end points for proper positioning
+            const midX = (startX + endX) / 2;
+            const midY = (startY + endY) / 2;
+            
+            // Calculate rotation angle in degrees
+            const angle = Math.atan2(endY - startY, endX - startX) * (180 / Math.PI);
+            
+            position = { x: midX, y: 0, z: midY };
+            dimensions = { 
+                width: wallWidth,
+                height: options.height || 250, 
+                depth: options.thickness || 10 
+            };
+            options.angle = angle;
+        }
         
-        // Calculate rotation angle in degrees
-        const angle = Math.atan2(endY - startY, endX - startX) * (180 / Math.PI);
+        // Create wall
+        const rotationObj = { 
+            x: 0, 
+            y: (options.angle || 0) * Math.PI / 180, 
+            z: 0 
+        };
         
-        // Create wall object
-        const position = { x: midX, y: 0, z: midY }; // Use midpoint for positioning
-        const rotationObj = { x: 0, y: angle * Math.PI / 180, z: 0 };
-        const thickness = options.thickness || 10; // Default wall thickness
-        const color = options.color || '#e8e8e8'; // Default wall color
-        const dimensions = { width: width, height: options.height || 250, depth: thickness };
+        const wallOptions = {
+            ...options,
+            thickness: options.thickness || 10,
+            color: options.color || '#e8e8e8'
+        };
         
         // Create and add the wall
-        const wall = new Wall(id, position, rotationObj, dimensions, {
-            ...options,
-            thickness: thickness
-        });
-        
+        const wall = new Wall(id, position, rotationObj, dimensions, wallOptions);
         wall.createFabricObject(this.canvas2d);
         
         // Add to objects array if not already tracking
@@ -978,20 +1015,35 @@ class App {
     }
     
     /**
-     * Set the active viewing mode (2D or 3D)
+     * Set the active viewing mode (2D, 3D, or 360)
      */
     setActiveMode(mode) {
-        if (mode !== '2d' && mode !== '3d') return;
+        if (!['2d', '3d', '360'].includes(mode)) return;
         
         this.activeMode = mode;
         
         // Update UI
-        document.getElementById('toggle-2d').classList.toggle('active', mode === '2d');
-        document.getElementById('toggle-3d').classList.toggle('active', mode === '3d');
+        document.getElementById('toggle-2d')?.classList.toggle('active', mode === '2d');
+        document.getElementById('toggle-3d')?.classList.toggle('active', mode === '3d');
+        document.getElementById('toggle-360')?.classList.toggle('active', mode === '360');
         
         // Show/hide appropriate canvas
-        document.getElementById('canvas-2d').classList.toggle('active', mode === '2d');
-        document.getElementById('canvas-3d-container').classList.toggle('active', mode === '3d');
+        if (document.getElementById('canvas-2d')) {
+            document.getElementById('canvas-2d').classList.toggle('active', mode === '2d');
+        }
+        
+        if (document.getElementById('canvas-3d-container')) {
+            document.getElementById('canvas-3d-container').classList.toggle('active', mode === '3d');
+        }
+        
+        if (document.getElementById('panorama-container')) {
+            document.getElementById('panorama-container').classList.toggle('active', mode === '360');
+            
+            // Initialize panorama if needed
+            if (mode === '360' && this.panoramaViewer) {
+                this.panoramaViewer.show();
+            }
+        }
         
         console.log(`View mode switched to ${mode}`);
     }
@@ -1012,7 +1064,10 @@ class App {
         if (toolButton) {
             toolButton.classList.add('active');
         }
+        
+        // Reset active wall drawing flag
         this.activeWallDrawing = false;
+        
         // Clean up any in-progress drawing
         this.cancelWallDrawing();
         
@@ -1052,6 +1107,7 @@ class App {
                 this.canvas2d.on('mouse:down', addDeskHandler);
                 console.log('Add desk tool activated');
                 break;
+                
             case 'add-seat-desk':
                 // Set canvas to non-selection mode for desk placement
                 this.canvas2d.selection = false;
@@ -1060,44 +1116,43 @@ class App {
                 document.body.style.cursor = 'crosshair';
                 
                 // Create a one-time event handler for mouse:down
-                const addDeskChairkHandler = (e) => {
+                const addDeskChairHandler = (e) => {
                     // Get coordinates in canvas space
                     const pointer = this.canvas2d.getPointer(e.e);
 
-                     // Apply grid snapping if Ctrl is pressed
-                     let x = pointer.x;
-                     let y = pointer.y;
+                    // Apply grid snapping if Ctrl is pressed
+                    let x = pointer.x;
+                    let y = pointer.y;
 
-                     if (this.keyboardCtrl) {
+                    if (this.keyboardCtrl) {
                         x = Math.round(x / this.gridSize) * this.gridSize;
                         y = Math.round(y / this.gridSize) * this.gridSize;
                     }
                     
-                    
                     // Add desk at the pointer position
                     const deskWithChair = this.addDeskWithChair(
                         'desk_' + Date.now(), 
-                        pointer.x, 
-                        pointer.y
+                        x, 
+                        y
                     );
-
-                    
                     
                     // Add to objects array if not already tracking
                     if (this.objects && !this.objects.includes(deskWithChair)) {
                         this.objects.push(deskWithChair);
                     }
                     
+                    // Check for collision with walls
                     const fabricObj = deskWithChair.fabricObject;
-                    if (this.checkObjectWallCollision(fabricObj)) {
+                    if (fabricObj && this.checkObjectWallCollision(fabricObj)) {
                         this.canvas2d.remove(fabricObj);
                         this.objects.pop(); // Remove from objects array
                         
                         // Show error feedback
                         this.showPlacementError(x, y);
                     }
+                    
                     // Remove this event handler after first use
-                    this.canvas2d.off('mouse:down', addDeskChairkHandler);
+                    this.canvas2d.off('mouse:down', addDeskChairHandler);
                     
                     // Reset cursor
                     document.body.style.cursor = 'default';
@@ -1107,8 +1162,8 @@ class App {
                 };
                 
                 // Add the one-time event handler
-                this.canvas2d.on('mouse:down', addDeskChairkHandler);
-                console.log('Add desk tool activated');
+                this.canvas2d.on('mouse:down', addDeskChairHandler);
+                console.log('Add desk with chair tool activated');
                 break;
                 
             case 'select':
@@ -1123,6 +1178,7 @@ class App {
             case 'add-wall':
                 // Set canvas to non-selection mode for wall drawing
                 this.canvas2d.selection = false;
+                this.activeWallDrawing = true;
                 
                 // Setup wall drawing with first click handler
                 this.setupWallDrawing();
@@ -1132,6 +1188,10 @@ class App {
             // Add more tools as needed
         }
     }
+    
+    /**
+     * Show error indicator when object can't be placed
+     */
     showPlacementError(x, y) {
         // Create a temporary error indicator
         const errorIndicator = new fabric.Circle({
@@ -1173,8 +1233,8 @@ class App {
     }   
     
     /**
- * Set up wall drawing interaction with angle snapping
- */
+     * Set up wall drawing interaction with angle snapping
+     */
     setupWallDrawing() {
         // Create a cursor style for the wall drawing mode
         document.body.style.cursor = 'crosshair';
@@ -1562,26 +1622,6 @@ class App {
     }
     
     /**
-     * Cancel wall drawing in progress
-     */
-    cancelWallDrawing() {
-        this.cleanupWallDrawingVisuals();
-        this.wallDrawingStartPoint = null;
-        this.cleanupWallDrawingHandlers();
-        
-        // Reset cursor
-        document.body.style.cursor = 'default';
-    }
-    
-    /**
-     * Clean up wall drawing event handlers
-     */
-    cleanupWallDrawingHandlers() {
-        this.canvas2d.off('mouse:move', this.wallPreviewHandler);
-        this.canvas2d.off('mouse:down', this.secondClickHandler);
-    }
-    
-    /**
      * Zoom in on the canvas
      */
     zoomIn() {
@@ -1591,152 +1631,161 @@ class App {
         // TODO: Add 3D zoom when implemented
     }
     
-        /**
+    /**
      * Zoom out on the canvas
      */
-        zoomOut() {
-            if (this.activeMode === '2d' && this.canvas2d) {
-                this.canvas2d.setZoom(this.canvas2d.getZoom() * 0.9);
-            }
-            // TODO: Add 3D zoom when implemented
+    zoomOut() {
+        if (this.activeMode === '2d' && this.canvas2d) {
+            this.canvas2d.setZoom(this.canvas2d.getZoom() * 0.9);
         }
-        
-        /**
-         * Reset the view to default
-         */
-        resetView() {
-            if (this.activeMode === '2d' && this.canvas2d) {
-                this.canvas2d.setZoom(1);
-                this.canvas2d.setViewportTransform([1, 0, 0, 1, 0, 0]);
-            }
-            // TODO: Add 3D reset when implemented
+        // TODO: Add 3D zoom when implemented
+    }
+    
+    /**
+     * Reset the view to default
+     */
+    resetView() {
+        if (this.activeMode === '2d' && this.canvas2d) {
+            this.canvas2d.setZoom(1);
+            this.canvas2d.setViewportTransform([1, 0, 0, 1, 0, 0]);
         }
-        
-        /**
-         * Save the current layout
-         */
-        saveLayout() {
-            try {
+        // TODO: Add 3D reset when implemented
+    }
+    
+    /**
+     * Save the current layout
+     */
+    saveLayout() {
+        try {
+            if (this.locationManager && this.locationManager.selectedFloor) {
+                // Use location manager to save layout for current floor
+                this.locationManager.saveCurrentLayout();
+            } else {
+                // Fallback to local storage
                 const layout = {
                     objects: this.objects.map(obj => obj.toJSON()),
                     timestamp: new Date().toISOString()
                 };
                 
-                // Save to localStorage for now
                 localStorage.setItem('savedLayout', JSON.stringify(layout));
-                
-                console.log('Layout saved');
+                console.log('Layout saved locally');
                 alert('Layout saved successfully');
-            } catch (error) {
-                console.error('Failed to save layout:', error);
-                alert('Failed to save layout: ' + error.message);
             }
+        } catch (error) {
+            console.error('Failed to save layout:', error);
+            alert('Failed to save layout: ' + error.message);
         }
-        
-        /**
-         * Load a previously saved layout
-         */
-        loadLayout() {
-            try {
+    }
+    
+    /**
+     * Load a previously saved layout
+     */
+    loadLayout() {
+        try {
+            if (this.locationManager && this.locationManager.selectedFloor) {
+                // Use location manager to load layout for current floor
+                this.locationManager.loadFloorLayout(this.locationManager.selectedFloor);
+            } else {
+                // Fallback to local storage
                 const savedLayout = localStorage.getItem('savedLayout');
                 if (!savedLayout) {
                     alert('No saved layout found');
                     return;
                 }
                 
-                // TODO: Implement layout loading logic
-                console.log('Layout loaded');
-                alert('Layout loading not yet implemented');
-            } catch (error) {
-                console.error('Failed to load layout:', error);
-                alert('Failed to load layout: ' + error.message);
-            }
-        }
-        generateMockUsers() {
-            const departments = ['Engineering', 'Sales', 'Marketing', 'HR', 'Finance', 'Design'];
-            const users = [];
-            const localImageBasePath = 'https://randomuser.me/api/portraits/thumb/men/';
-            // Generate 50 mock users
-            for (let i = 1; i <= 50; i++) {
-                const userId = `user${i}`;
-                const firstName = ['John', 'Jane', 'Mike', 'Sarah', 'David', 'Lisa', 'Alex', 'Emma', 'Chris', 'Anna'][i % 10];
-                const lastName = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Miller', 'Davis', 'Garcia', 'Rodriguez', 'Wilson'][i % 10];
-                const department = departments[i % departments.length];
+                const layoutData = JSON.parse(savedLayout);
                 
-                // Generate a profile photo URL using a placeholder service
-                // Using i to ensure each user gets a unique image
-                const photoUrl = `${localImageBasePath}${i}.jpg`;
+                // Clear existing objects
+                this.canvas2d.clear();
+                this.objects = [];
                 
-                // console.log(photoUrl);
-                
-                users.push(new User(
-                    userId,
-                    `${firstName} ${lastName}`,
-                    `${firstName.toLowerCase()}.${lastName.toLowerCase()}@zaunergroup.com`,
-                    department,
-                    photoUrl
-                ));
-            }
-            console.log(users);
-            this.users = users;
-
-        }
-        /**
-     * Load an SVG layout from local storage and set it as a background layer
-     */
-        loadSvgBackground() {
-            
-            const svgUrl = localStorage.getItem[0];
-            console.log(svgUrl);
-      
-            fetch(svgUrl)
-                .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network error while fetching SVG');
-                }
-                return response.text();
-                })
-                .then(svgData => {
-                // Load the SVG into Fabric from its string content
-                fabric.loadSVGFromString(svgData, (objects, options) => {
-                    // Group the parsed SVG elements together
-                    const svgGroup = fabric.util.groupSVGElements(objects, options);
+                // Create objects from layout data
+                layoutData.objects.forEach(obj => {
+                    const position = { x: obj.position.x, y: obj.position.y, z: obj.position.z };
+                    const rotation = { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z };
+                    const options = obj.options || {};
                     
-                    // Optionally, you can set properties on the group (e.g., non-interactive)
-                    svgGroup.set({
-                    selectable: false,
-                    evented: false,
-                    opacity: 0.8 // or any desired opacity
-                    });
-                    
-                    // Add the group to your Fabric canvas
-                    canvas.add(svgGroup);
-                    canvas.renderAll();
+                    // Create the object based on type
+                    if (obj.type === 'wall') {
+                        this.addWall(
+                            obj.id,
+                            position.x,
+                            position.z,
+                            obj.dimensions.width,
+                            obj.dimensions.depth,
+                            { 
+                                ...options,
+                                angle: rotation.y * (180 / Math.PI)
+                            }
+                        );
+                    } else if (obj.type === 'desk') {
+                        this.addDesk(
+                            obj.id,
+                            position.x,
+                            position.z,
+                            rotation.y * (180 / Math.PI),
+                            options
+                        );
+                    } else if (obj.type === 'deskWithChair') {
+                        this.addDeskWithChair(
+                            obj.id,
+                            position.x,
+                            position.z,
+                            rotation.y * (180 / Math.PI),
+                            options
+                        );
+                    }
                 });
-                })
-                .catch(error => console.error('Failed to load SVG:', error));
+                
+                console.log('Layout loaded');
+                alert('Layout loaded successfully');
+            }
+        } catch (error) {
+            console.error('Failed to load layout:', error);
+            alert('Failed to load layout: ' + error.message);
+        }
+    }
+    
+    /**
+     * Generate mock users for development
+     */
+    generateMockUsers() {
+        const departments = ['Engineering', 'Sales', 'Marketing', 'HR', 'Finance', 'Design'];
+        const users = [];
+        const localImageBasePath = 'https://randomuser.me/api/portraits/thumb/men/';
+        
+        // Generate 50 mock users
+        for (let i = 1; i <= 50; i++) {
+            const userId = `user${i}`;
+            const firstName = ['John', 'Jane', 'Mike', 'Sarah', 'David', 'Lisa', 'Alex', 'Emma', 'Chris', 'Anna'][i % 10];
+            const lastName = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Miller', 'Davis', 'Garcia', 'Rodriguez', 'Wilson'][i % 10];
+            const department = departments[i % departments.length];
+            
+            // Generate a profile photo URL using a placeholder service
+            // Using i to ensure each user gets a unique image
+            const photoUrl = `${localImageBasePath}${i}.jpg`;
+            
+            users.push(new User(
+                userId,
+                `${firstName} ${lastName}`,
+                `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.com`,
+                department,
+                photoUrl
+            ));
         }
         
+        this.users = users;
+        console.log('Generated mock users:', users.length);
+    }
     
-        /**
-         * Save an SVG as the background layer to local storage
-         * @param {string} svgData - SVG data as string
-         */
-        saveSvgBackground(svgData) {
-            try {
-                localStorage.setItem('layoutSvgBackground', svgData);
-                console.log('SVG background saved to local storage');
-                return true;
-            } catch (error) {
-                console.error('Failed to save SVG background:', error);
-                return false;
-            }
-        }
-    
-        /**
-         * Upload an SVG file and set it as a background
-         */
-        uploadSvgBackground() {
+    /**
+     * Load an SVG layout and set it as a background layer
+     */
+    loadSvgBackground() {
+        if (this.fileUploadManager) {
+            // Use the file upload manager if available
+            this.fileUploadManager.uploadSvgFloorPlan();
+        } else {
             // Create a file input element
             const fileInput = document.createElement('input');
             fileInput.type = 'file';
@@ -1746,7 +1795,7 @@ class App {
                 if (e.target.files && e.target.files[0]) {
                     const file = e.target.files[0];
                     console.log('Selected file:', file);
-    
+        
                     const reader = new FileReader();
                     
                     reader.onload = (event) => {
@@ -1760,8 +1809,24 @@ class App {
                             this.canvas2d.remove(this.svgBackground);
                         }
                         
-                        // Load the new background
-                        this.loadSvgBackground();
+                        // Load the SVG into fabric
+                        fabric.loadSVGFromString(svgData, (objects, options) => {
+                            // Group the parsed SVG elements together
+                            const svgGroup = fabric.util.groupSVGElements(objects, options);
+                            
+                            // Set properties on the group
+                            svgGroup.set({
+                                selectable: false,
+                                evented: false,
+                                opacity: 0.8
+                            });
+                            
+                            // Store reference and add to canvas
+                            this.svgBackground = svgGroup;
+                            this.canvas2d.add(svgGroup);
+                            this.canvas2d.sendToBack(svgGroup);
+                            this.canvas2d.renderAll();
+                        });
                     };
                     
                     reader.readAsText(file);
@@ -1771,21 +1836,36 @@ class App {
             // Trigger file selection dialog
             fileInput.click();
         }
+    }
     
-        /**
-         * Remove the SVG background
-         */
-        removeSvgBackground() {
-            if (this.svgBackground) {
-                this.canvas2d.remove(this.svgBackground);
-                this.svgBackground = null;
-            }
-            
-            localStorage.removeItem('layoutSvgBackground');
-            console.log('SVG background removed');
+    /**
+     * Save an SVG as the background layer to local storage
+     * @param {string} svgData - SVG data as string
+     */
+    saveSvgBackground(svgData) {
+        try {
+            localStorage.setItem('layoutSvgBackground', svgData);
+            console.log('SVG background saved to local storage');
+            return true;
+        } catch (error) {
+            console.error('Failed to save SVG background:', error);
+            return false;
         }
     }
     
-    
-    // Create and initialize the application
-    const app = new App();
+    /**
+     * Remove the SVG background
+     */
+    removeSvgBackground() {
+        if (this.svgBackground) {
+            this.canvas2d.remove(this.svgBackground);
+            this.svgBackground = null;
+        }
+        
+        localStorage.removeItem('layoutSvgBackground');
+        console.log('SVG background removed');
+    }
+}
+
+// Create and initialize the application
+window.app = new App();
