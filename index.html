@@ -9,23 +9,38 @@
 <body>
     <div id="app-container">
         <header>
-            <div class="header-container">
-                <div class="company-logo">
-                    <img src="images/ZGP_Logo_pos.png" alt="Company Logo" id="company-logo">
-                </div>
-                <div class="header-title">
-                    <h1>Office Seating Plan</h1>
-                </div>
-                <div class="header-controls-wrapper" >
-                    <div class="auth-section inner-container">
-                        <span id="user-info">Logged in as: <span id="username">kgwb72</span></span>
-                        <button id="login-button">Login with Entra ID</button>
-                        <button id="logout-button" >Logout</button>
+            <div class="header-top">
+                <div class="header-container">
+                    <div class="company-logo">
+                        <img src="images/ZGP_Logo_pos.png" alt="Company Logo" id="company-logo">
                     </div>
-                    <div class="view-toggle inner-container">
-                        <button id="toggle-2d" class="active" class="tool-btn">2D View</button>
-                        <button id="toggle-3d" class="tool-btn">3D View</button>
+                    <div class="header-title">
+                        <h1>Office Seating Plan</h1>
                     </div>
+                    <div class="header-controls-wrapper">
+                        <div class="auth-section inner-container">
+                            <span id="user-info">Logged in as: <span id="username">kgwb72</span></span>
+                            <button id="login-button">Login with Entra ID</button>
+                            <button id="logout-button">Logout</button>
+                        </div>
+                        <div class="view-toggle inner-container">
+                            <button id="toggle-2d" class="active" class="tool-btn">2D View</button>
+                            <button id="toggle-3d" class="tool-btn">3D View</button>
+                            <button id="toggle-360" class="tool-btn">360° View</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="header-bottom">
+                <div class="location-selector-container">
+                    <label for="location-selector">Location:</label>
+                    <select id="location-selector"></select>
+                    
+                    <label for="floor-selector">Floor:</label>
+                    <select id="floor-selector"></select>
+                    
+                    <span id="location-title">Headquarters</span> / <span id="floor-title">Ground Floor</span>
                 </div>
             </div>
         </header>
@@ -72,6 +87,17 @@
                     </div>
                 </div>
                 <div class="sidebar-section">
+                    <h3>Department Zones</h3>
+                    <div class="department-controls">
+                        <button id="create-zone" class="tool-btn">Create Zone</button>
+                        <button id="delete-zone" class="tool-btn">Delete Zone</button>
+                        <button id="color-by-department" class="tool-btn">Color by Department</button>
+                    </div>
+                    <div class="department-list">
+                        <!-- Will be populated dynamically -->
+                    </div>
+                </div>
+                <div class="sidebar-section">
                     <h3>2D Layout</h3>
                     <div class="layout-actions">
                         <!-- Add these buttons to your toolbar -->
@@ -106,14 +132,25 @@
         </div>
     </div>
 
-    <!-- Load core app scripts -->
-    <!-- <script src="js/config.js"></script>
-    <script src="js/utils.js"></script>
-    <script src="js/events.js"></script> -->
-    <script src="js/models.js"></script>
-   
-    <!-- Load 2D functionality -->
+    <!-- Core services -->
+    <!-- Authentication Services -->
+    <script src="services/mock-auth-service.js"></script>
+    <script src="services/auth-service.js"></script>
+    <script src="services/server-data-service.js"></script>
+
+    <!-- Managers -->
+    <script src="managers/location-manager.js"></script>
+    <script src="managers/seat-assignment-manager.js"></script>
+    <script src="managers/department-zone-manager.js"></script>
+    <script src="managers/file-upload-manager.js"></script>
+
+    <!-- Views -->
+    <script src="views/panorama-viewer.js"></script>
+
+    <!-- Canvas implementations -->
     <script src="js/canvas2d.js"></script>
+    <script src="js/canvas3d.js"></script>
+    <script src="js/models.js"></script>
     
     <!-- Load 3D functionality -->
     <!-- <script src="js/canvas3d.js"></script> -->
@@ -121,6 +158,8 @@
     <!-- Add this to the head section of your HTML file, before your other scripts -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script src="https://alcdn.msauth.net/browser/2.32.1/js/msal-browser.js"></script>
     
     
     <!-- Load authentication

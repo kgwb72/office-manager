@@ -66,28 +66,94 @@ class OfficeObject {
       this.updateVisualState();
     }
     
-    // Update visual appearance based on state (selected, assigned, etc.)
-    updateVisualState() {
-      const selectedColor = '#add8e6'; // Light blue
-      const assignedColor = '#90ee90'; // Light green
-      const defaultColor = this.options.color || '#cccccc';
+    //Update visual appearance based on state (selected, assigned, etc.)
+    // updateVisualState() {
+    //   const selectedColor = '#add8e6'; // Light blue
+    //   const assignedColor = '#90ee90'; // Light green
+    //   const defaultColor = this.options.color || '#cccccc';
       
-      let color = defaultColor;
-      if (this.isSelected) color = selectedColor;
-      if (this.assignedUser) color = assignedColor;
+    //   let color = defaultColor;
+    //   if (this.isSelected) color = selectedColor;
+    //   if (this.assignedUser) color = assignedColor;
       
-      // Update Fabric.js object
-      if (this.fabricObject) {
-        this.fabricObject.set('fill', color);
-        this.fabricObject.canvas?.renderAll();
-      }
+    //   // Update Fabric.js object
+    //   if (this.fabricObject) {
+    //     this.fabricObject.set('fill', color);
+    //     this.fabricObject.canvas?.renderAll();
+    //   }
       
-      // Update Three.js object
-      if (this.threeObject && this.threeObject.material) {
-        this.threeObject.material.color.set(color);
-      }
+    //   // Update Three.js object
+    //   if (this.threeObject && this.threeObject.material) {
+    //     this.threeObject.material.color.set(color);
+    //   }
+    // }
+    // In models.js
+
+// Override the base class updateVisualState method
+  updateVisualState() {
+    // Instead of calling super.updateVisualState(), implement what we need directly
+    const selectedColor = '#add8e6'; // Light blue
+    const assignedColor = '#90ee90'; // Light green
+    const defaultDeskColor = this.options.deskColor || '#8B4513';
+    const defaultChairColor = this.options.chairColor || '#4169E1';
+    
+    // Determine colors based on state
+    let deskColor = defaultDeskColor;
+    let chairColor = this.assignedUser ? '#2ecc71' : defaultChairColor; // Green if assigned
+    
+    if (this.isSelected) {
+      deskColor = selectedColor;
     }
     
+    // If we have a fabric object, update its appearance
+    if (this.fabricObject) {
+      // We need to update the desk and chair colors and add/remove initials text
+      // Since fabric.Group doesn't allow direct modification of its children,
+      // we need to recreate the group
+      
+      const oldLeft = this.fabricObject.left;
+      const oldTop = this.fabricObject.top;
+      const oldAngle = this.fabricObject.angle;
+      const oldCanvas = this.fabricObject.canvas;
+      
+      // Remove old object
+      if (oldCanvas) {
+        oldCanvas.remove(this.fabricObject);
+      }
+      
+      // Update position and rotation from the old object
+      this.position.x = oldLeft;
+      this.position.z = oldTop;
+      this.rotation.y = oldAngle * (Math.PI / 180);
+      
+      // Store the old colors temporarily
+      const oldDeskColor = this.deskColor;
+      const oldChairColor = this.chairColor;
+      
+      // Update colors
+      this.deskColor = deskColor;
+      this.chairColor = chairColor;
+      
+      // Create new object
+      if (oldCanvas) {
+        this.createFabricObject(oldCanvas);
+      }
+      
+      // Restore original colors (so they're not permanently changed)
+      this.deskColor = oldDeskColor;
+      this.chairColor = oldChairColor;
+    }
+    
+    // Update Three.js object if it exists
+    if (this.threeObject) {
+      // Update 3D object colors
+      this.threeObject.traverse((child) => {
+        if (child.isMesh) {
+          // Update mesh materials here...
+        }
+      });
+    }
+  }
     // Select this object
     select() {
       this.isSelected = true;
@@ -334,7 +400,8 @@ class OfficeObject {
         depth: options.depth || 80,   // desk depth
         chairWidth: options.chairWidth || 40,
         chairHeight: options.chairHeight || 45,
-        chairDepth: options.chairDepth || 50
+        chairDepth: options.chairDepth || 50,
+
       };
       
       super(id, 'deskWithChair', position, rotation, dimensions, options);
@@ -356,14 +423,30 @@ class OfficeObject {
       // Create chair (circle)
       const chair = new fabric.Circle({
         radius: this.dimensions.chairWidth / 2,
-        fill: this.chairColor,
+        fill: this.assignedUser ? '#2ecc71' : this.chairColor, // Green if assigned, default if not
         originX: 'center',
         originY: 'center',
         top: this.dimensions.depth / 2 + 10  // Position chair below desk
       });
       
-      // Group desk and chair
-      this.fabricObject = new fabric.Group([desk, chair], {
+      // Group elements to be included
+      const groupObjects = [desk, chair];
+      
+      // Add initials text if user is assigned
+      if (this.assignedUser) {
+        const initials = this.getInitials(this.assignedUser.name);
+        const chairText = new fabric.Text(initials, {
+          fontSize: Math.min(this.dimensions.chairWidth / 2, 14), // Scale font size based on chair size
+          fill: 'white',
+          fontWeight: 'bold',
+          originX: 'center',
+          originY: 'center',
+          top: this.dimensions.depth / 2 + 10  // Position text at the same position as chair
+        });
+        groupObjects.push(chairText);
+      }
+      
+      this.fabricObject = new fabric.Group(groupObjects, {
         left: this.position.x,
         top: this.position.z,  // Use z for top position in 2D
         angle: this.rotation.y * (180 / Math.PI),
@@ -388,7 +471,6 @@ class OfficeObject {
         mtr: true  // Only keep rotation control visible
       });
       
-
       // Add custom properties
       this.fabricObject.officeObject = this;
       
@@ -402,13 +484,13 @@ class OfficeObject {
       this.fabricObject.on('rotating', () => {
         // Get the raw angle from fabric object        
         let angle = this.fabricObject.angle;
-   
+    
         // Convert to radians for the 3D object
         this.fabricObject.angle = angle;
         this.rotation.y = angle * (Math.PI / 180);
         this.updateThreeFromFabric();
       });
-
+    
       this.fabricObject.on('mouseover', () => {
         // Store original origin point
         const origOriginX = this.fabricObject.originX;
@@ -418,14 +500,12 @@ class OfficeObject {
         this.fabricObject.set({
           originX: 'center',
           originY: 'center',
-          // scaleX: 1.1,
-          // scaleY: 1.1,
           opacity: 0.8,
           shadow: new fabric.Shadow({
-        color: 'rgba(99, 132, 179, 0.7)',       
-        blur: 15,
-        offsetX: 0,
-        offsetY: 0
+            color: 'rgba(99, 132, 179, 0.7)',       
+            blur: 15,
+            offsetX: 0,
+            offsetY: 0
           })
         });
         
@@ -475,14 +555,37 @@ class OfficeObject {
       this.fabricObject.on('deselected', () => {
         this.deselect();
       });    
-
+    
       this.fabricObject.on('deleted', () => {
         // Remove from scene
         this.remove(canvas, null);
       });
+      
       // Add to canvas
       canvas.add(this.fabricObject);
       return this.fabricObject;
+    }
+    
+    // Add a helper method to get initials from a name
+    getInitials(name) {
+      if (!name) return '';
+      
+      return name
+        .split(' ')
+        .map(part => part.charAt(0))
+        .join('')
+        .toUpperCase()
+        .substring(0, 2); // Limit to 2 characters
+    }
+    getInitials(name) {
+      if (!name) return '';
+      
+      return name
+        .split(' ')
+        .map(part => part.charAt(0))
+        .join('')
+        .toUpperCase()
+        .substring(0, 2); // Limit to 2 characters
     }
     
     createThreeObject(scene) {
@@ -570,7 +673,37 @@ class OfficeObject {
         this.wallColor = options.color || '#414141'; // Light gray by default
         this.wallThickness = options.thickness || 10; // Default wall thickness
         this.wallOpacity = options.opacity || 1.0; // Default opacity
-        console.log(this.wallColor)
+        
+        this.endpoints = [];
+        this.updateEndpoints();
+    }
+
+    updateEndpoints() {
+      // Calculate endpoints based on position, dimension, and rotation
+      const halfWidth = this.dimensions.width / 2;
+      const halfDepth = this.dimensions.depth / 2;
+      const angle = this.rotation.y;
+      
+      // Define corners relative to center
+      const corners = [
+        { x: -halfWidth, y: -halfDepth },
+        { x: halfWidth, y: -halfDepth },
+        { x: halfWidth, y: halfDepth },
+        { x: -halfWidth, y: halfDepth }
+      ];
+      
+      // Transform corners based on rotation and position
+      this.endpoints = corners.map(corner => {
+        // Apply rotation
+        const rotatedX = corner.x * Math.cos(angle) - corner.y * Math.sin(angle);
+        const rotatedY = corner.x * Math.sin(angle) + corner.y * Math.cos(angle);
+        
+        // Apply position offset
+        return {
+          x: rotatedX + this.position.x,
+          y: rotatedY + this.position.z // Use z for 2D top
+        };
+      });
     }
     
     createFabricObject(canvas) {
@@ -591,7 +724,9 @@ class OfficeObject {
             selectable: true,
             cornerColor: '#38A3D8', // Blue corner handles
             cornerSize: 8,
-            transparentCorners: false
+            transparentCorners: false,
+            snapAngle: 15, // Snap rotation to 15-degree increments when Ctrl is pressed
+            snapThreshold: 10 // Snap threshold in degrees
         });
         
         // Add custom property
@@ -602,10 +737,20 @@ class OfficeObject {
             this.position.x = this.fabricObject.left;
             this.position.z = this.fabricObject.top;
             this.updateThreeFromFabric();
+
+            this.updateEndpoints();
         });
         
         this.fabricObject.on('rotating', () => {
+          const appInstance = window.app;
+          if (appInstance && appInstance.keyboardCtrl) {
+            const snapAngle = this.fabricObject.snapAngle || 15;
+            const targetAngle = Math.round(this.fabricObject.angle / snapAngle) * snapAngle;
+            this.fabricObject.angle = targetAngle;
+          }
             this.rotation.y = this.fabricObject.angle * (Math.PI / 180);
+
+            this.updateEndpoints();
             this.updateThreeFromFabric();
         });
         
@@ -689,6 +834,48 @@ class OfficeObject {
         canvas.add(this.fabricObject);
         return this.fabricObject;
     }
+  }
+  class OfficeObjectFactory {
+    static createObject(type, id, position, rotation, options = {}) {
+        switch (type.toLowerCase()) {
+            case 'desk':
+                return new Desk(id, position, rotation, options);
+            case 'deskwithchair':
+                return new DeskWithChair(id, position, rotation, options);
+            case 'wall':
+                const dimensions = {
+                    width: options.width || 100,
+                    height: options.height || 250,
+                    depth: options.thickness || 10
+                };
+                return new Wall(id, position, rotation, dimensions, options);
+            case 'room':
+                return new Room(id, position, rotation, options);
+            default:
+                throw new Error(`Unknown object type: ${type}`);
+        }
+    }
+  }
+
+  // Add a Room class for grouping related objects
+  class Room extends OfficeObject {
+      constructor(id, position, rotation, options = {}) {
+          const dimensions = {
+              width: options.width || 400,
+              height: options.height || 250,
+              depth: options.depth || 400
+          };
+          
+          super(id, 'room', position, rotation, dimensions, options);
+          
+          this.name = options.name || 'Room';
+          this.type = options.type || 'office'; // office, meeting, utility, etc.
+          this.capacity = options.capacity || 1;
+          this.department = options.department || null;
+          this.objects = []; // Objects contained in this room
+      }
+      
+      // Additional methods for room-specific functionality...
   }
   class User {
     constructor(id, name, email, department, photoUrl) {

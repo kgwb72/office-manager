@@ -11,6 +11,7 @@ class App {
         this.activeMode = '2d'; // Default to 2D mode
         this.selectedObject = null;
         this.objects = []; // Store all office objects
+        this.users = []; // Store all users
         this.gridSize = 5; // Grid size for snapping (in pixels)
         this.snapThreshold = 5; // Radius in pixels for endpoint snapping
 
@@ -24,6 +25,15 @@ class App {
         // Wall drawing properties
         this.wallDrawingStartPoint = null;
         this.wallDrawingPreview = null;
+
+        // Add new services
+        this.authService = null;
+        this.serverData = null;
+        this.panoramaViewer = null;
+        this.locationManager = null;
+        this.seatManager = null;
+        this.departmentZoneManager = null;
+        this.fileUploadManager = null;
         
         // Initialize when DOM is ready
         document.addEventListener('DOMContentLoaded', () => this.init());
@@ -38,13 +48,13 @@ class App {
             
             // Initialize canvases
             this.initializeCanvases();
-            
-            // this.loadSvgBackground();
+            // Initialize services
+            this.initializeServices();            
+
             // Set up event listeners for UI controls
             this.setupEventListeners();
             this.generateMockUsers();
             
-            // Add a sample desk with chair to demonstrate functionality
             
             console.log('Application initialized successfully');
         } catch (error) {
@@ -52,6 +62,57 @@ class App {
         }
     }
     
+    initializeServices() {
+        // Initialize auth service
+        this.authService = new AuthService();
+
+        // Add event listeners for login/logout buttons
+        document.getElementById('login-button').addEventListener('click', () => {
+            this.authService.login().then(user => {
+                if (user) {
+                    console.log('User logged in:', user);
+                    // You may want to reload or update data based on the logged-in user
+                }
+            });
+        });
+        
+        document.getElementById('logout-button').addEventListener('click', () => {
+            this.authService.logout().then(() => {
+                console.log('User logged out');
+                // You may want to clear user-specific data
+            });
+        });
+        
+        // Initialize server data service
+        this.serverData = new ServerDataService();
+        
+        // Set up authentication token if user is logged in
+        if (this.authService.currentUser) {
+            this.authService.getUserInfo().then(userInfo => {
+                if (userInfo && userInfo.accessToken) {
+                    this.serverData.setAuthToken(userInfo.accessToken);
+                }
+            });
+        }
+        
+        // Initialize panorama viewer (if container exists)
+        const panoramaContainer = document.getElementById('panorama-container');
+        if (panoramaContainer) {
+            this.panoramaViewer = new PanoramaViewer('panorama-container');
+        }
+        
+        // Initialize location manager
+        this.locationManager = new LocationManager(this);
+        
+        // Initialize seat manager
+        this.seatManager = new SeatAssignmentManager(this);
+        
+        // Initialize department zone manager
+        this.departmentZoneManager = new DepartmentZoneManager(this);
+        
+        // Initialize file upload manager
+        this.fileUploadManager = new FileUploadManager(this);
+    }
     /**
      * Initialize the 2D and 3D canvases
      */
@@ -1616,8 +1677,9 @@ class App {
                     photoUrl
                 ));
             }
-            
-            return users;
+            console.log(users);
+            this.users = users;
+
         }
         /**
      * Load an SVG layout from local storage and set it as a background layer
