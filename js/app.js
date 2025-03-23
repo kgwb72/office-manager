@@ -14,10 +14,10 @@ class App {
         this.users = []; // Store all users
         this.gridSize = 5; // Grid size for snapping (in pixels)
         this.snapThreshold = 5; // Radius in pixels for endpoint snapping
-
+        
         this.wallToWallSnap = true; // Enable wall-to-wall snapping
         this.objectToWallSnap = true; // Enable object-to-wall snapping
-
+        
         this.drawingWall = false;
         this.tempWall = null;
         this.startPoint = null;
@@ -25,7 +25,14 @@ class App {
         // Wall drawing properties
         this.wallDrawingStartPoint = null;
         this.wallDrawingPreview = null;
-
+        
+        // Config
+        this.config = {
+            apiUrl: 'https://localhost:44317/api',
+            useMockAuth: true, // Set to false for production
+            useMockData: false  // Set to false for production
+        };
+        
         // Add new services
         this.authService = null;
         this.serverData = null;
@@ -42,63 +49,84 @@ class App {
     /**
      * Initialize the application
      */
-    init() {
+    async init() {
         try {
             console.log('Initializing Office Manager application...');
+            
+            // Show loading indicator
+            this.showLoading('Initializing application...');
+            
+            // Initialize services first
+            await this.initializeServices();
             
             // Initialize canvases
             this.initializeCanvases();
             
-            // Initialize services
-            this.initializeServices();            
-
             // Set up event listeners for UI controls
             this.setupEventListeners();
             
-            // Generate mock data for development
-            this.generateMockUsers();
+            // Load users data
+            await this.loadUsers();
+            
+            // Hide loading indicator
+            this.hideLoading();
             
             console.log('Application initialized successfully');
         } catch (error) {
             console.error('Failed to initialize application:', error);
+            this.hideLoading();
+            this.showError('Failed to initialize application: ' + error.message);
         }
     }
     
     /**
      * Initialize application services
      */
-    initializeServices() {
+    async initializeServices() {
         // Initialize auth service
         this.authService = new AuthService();
-
-        // Add event listeners for login/logout buttons
-        document.getElementById('login-button').addEventListener('click', () => {
-            this.authService.login().then(user => {
-                if (user) {
-                    console.log('User logged in:', user);
-                    // You may want to reload or update data based on the logged-in user
-                }
-            });
-        });
-        
-        document.getElementById('logout-button').addEventListener('click', () => {
-            this.authService.logout().then(() => {
-                console.log('User logged out');
-                // You may want to clear user-specific data
-            });
-        });
+        this.authService.useMock = this.config.useMockAuth;
         
         // Initialize server data service
         this.serverData = new ServerDataService();
+        this.serverData.apiBaseUrl = this.config.apiUrl;
         
         // Set up authentication token if user is logged in
-        if (this.authService.currentUser) {
-            this.authService.getUserInfo().then(userInfo => {
-                if (userInfo && userInfo.accessToken) {
-                    this.serverData.setAuthToken(userInfo.accessToken);
+        const userInfo = await this.authService.getUserInfo();
+        if (userInfo && userInfo.token) {
+            this.serverData.setAuthToken(userInfo.token);
+        }
+        
+        // Add event listeners for login/logout buttons
+        document.getElementById('login-button')?.addEventListener('click', () => {
+            this.authService.login().then(user => {
+                if (user) {
+                    console.log('User logged in:', user);
+                    this.authService.getUserInfo().then(userInfo => {
+                        if (userInfo && userInfo.token) {
+                            this.serverData.setAuthToken(userInfo.token);
+                        }
+                    });
+                    
+                    // Reload data
+                    if (this.locationManager) {
+                        this.locationManager.initialize();
+                    }
                 }
             });
-        }
+        });
+        
+        document.getElementById('logout-button')?.addEventListener('click', () => {
+            this.authService.logout().then(() => {
+                console.log('User logged out');
+                this.serverData.setAuthToken(null);
+                
+                // Reload with no data
+                if (this.locationManager) {
+                    this.locationManager.initialize();
+                }
+            });
+        });
         
         // Initialize panorama viewer (if container exists)
         const panoramaContainer = document.getElementById('panorama-container');
@@ -106,26 +134,64 @@ class App {
             this.panoramaViewer = new PanoramaViewer('panorama-container');
         }
         
-        // Initialize location manager
-        this.locationManager = new LocationManager(this);
-        
-        // Initialize seat manager
-        this.seatManager = new SeatAssignmentManager(this);
-        
-        // Initialize department zone manager
-        this.departmentZoneManager = new DepartmentZoneManager(this);
-        
-        // Initialize file upload manager
-        this.fileUploadManager = new FileUploadManager(this);
+        // Wait for Canvas initialization before initializing managers
     }
-
+    
+    /**
+     * Load users data from API or mock
+     */
+    async loadUsers() {
+        try {
+            this.showLoading('Loading users...');
+            
+            let loadedUsers = [];
+            
+            // If we have a server connection
+            if (this.serverData && !this.config.useMockData) {
+                loadedUsers = await this.serverData.getUsers();
+            } else {
+                // Generate mock users for development
+                loadedUsers = this.generateMockUsers();
+            }
+            
+            // Convert to User objects
+            this.users = loadedUsers.map(userData => new User(
+                userData.id,
+                userData.displayName || userData.name,
+                userData.email,
+                userData.department || 'No Department',
+                userData.photoUrl || ''
+            ));
+            
+            this.hideLoading();
+            console.log('Loaded users:', this.users.length);
+        } catch (error) {
+            console.error('Failed to load users:', error);
+            this.hideLoading();
+            this.showError('Failed to load users: ' + error.message);
+            
+            // Generate mock users as fallback
+            this.users = this.generateMockUsers();
+        }
+    }
+    
     /**
      * Initialize the 2D and 3D canvases
      */
     initializeCanvases() {
         // Initialize 2D canvas using Fabric.js
         const canvas2dElement = document.getElementById('canvas-2d');
-        if (!canvas2dElement) throw new Error("Canvas 2D element not found");
+        if (!canvas2dElement) {
+            console.error("Canvas 2D element not found");
+            return;
+        }
+        
+        // First check if Fabric.js is loaded
+        if (typeof fabric === 'undefined') {
+            console.error("Fabric.js library not loaded!");
+            this.showError("Required Fabric.js library not loaded. Please check your network connection and reload the page.");
+            return;
+        }
         
         this.canvas2d = new fabric.Canvas('canvas-2d');
         
@@ -138,10 +204,36 @@ class App {
         this.canvas2d.setWidth(wrapperWidth || 800);
         this.canvas2d.setHeight(wrapperHeight || 600);
         
-        // Setup 3D canvas - we'll just initialize a placeholder for now
+        // Setup 3D canvas if Three.js is loaded
         this.canvas3dElement = document.getElementById('canvas-3d-container');
         
+        if (this.canvas3dElement && typeof THREE !== 'undefined') {
+            this.canvas3d = new Canvas3D('canvas-3d-container');
+        } else if (this.canvas3dElement) {
+            console.warn('THREE.js not loaded - 3D view will not be available');
+        }
+        
         console.log('Canvases initialized');
+        
+        // Now initialize managers that need canvas reference
+        this.initializeManagers();
+    }
+    
+    /**
+     * Initialize managers after canvas is ready
+     */
+    initializeManagers() {
+        // Initialize location manager
+        this.locationManager = new LocationManager(this);
+        
+        // Initialize seat manager
+        this.seatManager = new SeatAssignmentManager(this);
+        
+        // Initialize department zone manager
+        this.departmentZoneManager = new DepartmentZoneManager(this);
+        
+        // Initialize file upload manager
+        this.fileUploadManager = new FileUploadManager(this);
     }
     
     /**
@@ -149,27 +241,26 @@ class App {
      */
     setupEventListeners() {
         // View toggle buttons
-        document.getElementById('toggle-2d').addEventListener('click', () => this.setActiveMode('2d'));
-        document.getElementById('toggle-3d').addEventListener('click', () => this.setActiveMode('3d'));
-        if (document.getElementById('toggle-360')) {
-            document.getElementById('toggle-360').addEventListener('click', () => this.setActiveMode('360'));
-        }
+        document.getElementById('toggle-2d')?.addEventListener('click', () => this.setActiveMode('2d'));
+        document.getElementById('toggle-3d')?.addEventListener('click', () => this.setActiveMode('3d'));
+        document.getElementById('toggle-360')?.addEventListener('click', () => this.setActiveMode('360'));
         
         // Zoom controls
-        document.getElementById('zoom-in').addEventListener('click', () => this.zoomIn());
-        document.getElementById('zoom-out').addEventListener('click', () => this.zoomOut());
-        document.getElementById('reset-view').addEventListener('click', () => this.resetView());
+        document.getElementById('zoom-in')?.addEventListener('click', () => this.zoomIn());
+        document.getElementById('zoom-out')?.addEventListener('click', () => this.zoomOut());
+        document.getElementById('reset-view')?.addEventListener('click', () => this.resetView());
         
         // Tool buttons
-        document.getElementById('add-seat-desk').addEventListener('click', () => this.activateTool('add-seat-desk'));
-        document.getElementById('add-desk').addEventListener('click', () => this.activateTool('add-desk'));
-        document.getElementById('select-tool').addEventListener('click', () => this.activateTool('select'));
-        document.getElementById('add-wall').addEventListener('click', () => this.activateTool('add-wall'));
+        document.getElementById('add-seat-desk')?.addEventListener('click', () => this.activateTool('add-seat-desk'));
+        document.getElementById('add-desk')?.addEventListener('click', () => this.activateTool('add-desk'));
+        document.getElementById('select-tool')?.addEventListener('click', () => this.activateTool('select'));
+        document.getElementById('add-wall')?.addEventListener('click', () => this.activateTool('add-wall'));
+        document.getElementById('delete-tool')?.addEventListener('click', () => this.activateTool('delete'));
         
         // Layout saving/loading
-        document.getElementById('save-layout').addEventListener('click', () => this.saveLayout());
-        document.getElementById('load-layout').addEventListener('click', () => this.loadLayout());
-
+        document.getElementById('save-layout')?.addEventListener('click', () => this.saveLayout());
+        document.getElementById('load-layout')?.addEventListener('click', () => this.loadLayout());
+        
         // Background SVG management
         const uploadSvgBgBtn = document.getElementById('upload-svg-bg');
         const removeSvgBgBtn = document.getElementById('remove-svg-bg');
@@ -181,7 +272,7 @@ class App {
         if (removeSvgBgBtn) {
             removeSvgBgBtn.addEventListener('click', () => this.removeSvgBackground());
         }
-
+        
         // Set up canvas object event handlers
         this.setupCanvasObjectEventHandlers();
         
@@ -189,28 +280,46 @@ class App {
         this.setupKeyboardEventHandlers();
         
         // Add wheel event listener for zooming
-        document.getElementById('canvas-2d').addEventListener('wheel', (e) => this.handleMouseWheel(e), { passive: false });
+        document.getElementById('canvas-2d')?.addEventListener('wheel', (e) => this.handleMouseWheel(e), { passive: false });
+        
+        // Handle window resize
+        window.addEventListener('resize', () => this.handleWindowResize());
     }
-
+    
+    /**
+     * Handle window resize
+     */
+    handleWindowResize() {
+        // Get the canvas wrapper dimensions
+        const canvasWrapper = document.getElementById('canvas-wrapper');
+        if (!canvasWrapper) return;
+        
+        const wrapperWidth = canvasWrapper.clientWidth;
+        const wrapperHeight = canvasWrapper.clientHeight;
+        
+        // Update 2D canvas size
+        if (this.canvas2d) {
+            this.canvas2d.setWidth(wrapperWidth);
+            this.canvas2d.setHeight(wrapperHeight);
+            this.canvas2d.renderAll();
+        }
+        
+        // Update 3D canvas size if we have one
+        if (this.canvas3d) {
+            this.canvas3d.onWindowResize();
+        }
+    }
+    
     /**
      * Set up canvas object event handlers
      */
     setupCanvasObjectEventHandlers() {
+        if (!this.canvas2d) return;
+        
         // Object moving event handler
         this.canvas2d.on('object:moving', (e) => {
             const obj = e.target;
-            
             if (!obj) return;
-            
-            // // Handle wall endpoint snapping during movement
-            // if (obj.type === 'rect' && obj.officeObject && obj.officeObject.type === 'wall') {
-            //     this.handleWallMovementSnapping(obj);
-            // }
-            
-            // // Handle object-to-wall snapping
-            // if (obj.officeObject && (obj.officeObject.type === 'desk' || obj.officeObject.type === 'deskWithChair')) {
-            //     this.handleObjectToWallSnapping(obj);
-            // }
             
             // Apply grid snapping if Ctrl is pressed (for all objects)
             if (this.keyboardCtrl) {
@@ -221,150 +330,92 @@ class App {
         // Object rotation event handler
         this.canvas2d.on('object:rotating', (e) => {
             const obj = e.target;
+            if (!obj) return;
             
             // Apply rotation snapping if Ctrl is pressed
             if (this.keyboardCtrl) {
                 const snapAngle = 15; // Snap to 15-degree increments
                 obj.angle = Math.round(obj.angle / snapAngle) * snapAngle;
             }
-
-            // // Only apply to furniture objects
-            // if (obj.officeObject && (obj.officeObject.type === 'desk' || obj.officeObject.type === 'deskWithChair')) {
-            //     if (this.checkObjectWallCollision(obj)) {
-            //         // Revert to previous rotation if collision detected
-            //         obj.angle = obj.lastRotation || 0;
-            //         this.canvas2d.renderAll();
-            //     } else {
-            //         // Store last valid rotation
-            //         obj.lastRotation = obj.angle;
-            //     }
-            // }
         });
-
-        // Object modification event handler
-        this.canvas2d.on('object:modified', (e) => {
-            const obj = e.target;
-            if (!obj) return;
-            
-            // Perform final position checks and adjustments
-            // if (obj.officeObject && (obj.officeObject.type === 'desk' || obj.officeObject.type === 'deskWithChair')) {
-            //     // If object still collides with walls after modification, move it to last valid position
-            //     if (this.checkObjectWallCollision(obj)) {
-            //         obj.set({
-            //             left: obj.lastValidLeft || obj.left,
-            //             top: obj.lastValidTop || obj.top
-            //         });
-            //         this.canvas2d.renderAll();
-            //     }
-            // }
-        });
-
+        
+        // Set up wall drawing handlers
+        this.setupWallDrawingHandlers();
+    }
+    
+    /**
+     * Set up wall drawing handlers
+     */
+    setupWallDrawingHandlers() {
+        if (!this.canvas2d) return;
+        
         // Mouse move for wall drawing
         this.canvas2d.on('mouse:move', (e) => {
             if (this.drawingWall && this.startPoint && this.tempWall) {
                 const pointer = this.canvas2d.getPointer(e.e);
                 
-                // Try to snap to nearby wall endpoints
-                // const snappedPoint = this.keyboardCtrl ? 
-                //     this.findNearestWallEndpoint(pointer) : pointer;
-                
                 // Calculate width and height based on start and current point
                 const width = Math.abs(pointer.x - this.startPoint.x);
                 const height = Math.abs(pointer.y - this.startPoint.y);
                 
-                // // Determine if wall is horizontal or vertical based on which dimension is larger
-                // let isHorizontal = width > height;
-                
-                
-                
                 this.canvas2d.renderAll();
             }
         });
-
+        
         // Mouse down event handler to initiate wall drawing
-        // This sets the starting point for the wall and prepares a temporary visual representation
         this.canvas2d.on('mouse:down', (e) => {
             if (this.activeWallDrawing && !this.drawingWall) {
-            const pointer = this.canvas2d.getPointer(e.e);
-            
-            // Try to snap to wall endpoints if Ctrl is pressed
-            // const snappedPoint = this.keyboardCtrl ? 
-            //     this.findNearestWallEndpoint(pointer) : pointer;
-            
-            this.startPoint = { x: pointer.x, y: pointer.y };
-            this.drawingWall = true;
-            
-            // Create a temporary wall visualization
-            this.tempWall = new fabric.Rect({
-                left: this.startPoint.x,
-                top: this.startPoint.y,
-                width: 1,
-                height: 1,
-                fill: '#e8e8e8',
-                stroke: '#333',
-                strokeWidth: 1,
-                selectable: false,
-                evented: false
-            });
-            
-            this.canvas2d.add(this.tempWall);
+                const pointer = this.canvas2d.getPointer(e.e);
+                
+                this.startPoint = { x: pointer.x, y: pointer.y };
+                this.drawingWall = true;
+                
+                // Create a temporary wall visualization
+                this.tempWall = new fabric.Rect({
+                    left: this.startPoint.x,
+                    top: this.startPoint.y,
+                    width: 1,
+                    height: 1,
+                    fill: '#e8e8e8',
+                    stroke: '#333',
+                    strokeWidth: 1,
+                    selectable: false,
+                    evented: false
+                });
+                
+                this.canvas2d.add(this.tempWall);
             } else if (this.activeWallDrawing && this.drawingWall) {
-            const pointer = this.canvas2d.getPointer(e.e);
-            
-            // Try to snap to wall endpoints if Ctrl is pressed
-            // const endPoint = this.keyboardCtrl ? 
-            //     this.findNearestWallEndpoint(pointer) : pointer;
-            
-            // Remove the temporary visual wall
-            this.canvas2d.remove(this.tempWall);
-            
-            // Calculate width and height
-            const width = Math.abs(pointer.x - this.startPoint.x);
-            const height = Math.abs(pointer.y - this.startPoint.y);
-            
-            this.addWall(
-                'wall_' + Date.now(),
-                this.startPoint.x,
-                this.startPoint.y,
-                width,
-                10 // Fixed height for horizontal wall
-            );
-            // Reset wall drawing state
-            this.drawingWall = false;
-            this.startPoint = null;
-            this.tempWall = null;
-            
-            // Switch back to select tool after drawing to allow the user to interact with the newly created wall
-            if (this.activeWallDrawing) {
-                this.activeWallDrawing = false;
-                this.activateTool('select');
-            }
-            }
-        });
-
-        // Mouse move for wall drawing preview
-        this.canvas2d.on('mouse:move', (e) => {
-            if (this.drawingWall && this.startPoint && this.tempWall) {
-            const pointer = this.canvas2d.getPointer(e.e);
-            
-            // // Try to snap to nearby wall endpoints
-            // const snappedPoint = this.keyboardCtrl ? 
-            //     this.findNearestWallEndpoint(pointer) : pointer;
-            
-            // Calculate width and height based on start and current point
-            const width = Math.abs(pointer.x - this.startPoint.x);
-            const height = Math.abs(pointer.y - this.startPoint.y);
-            
-            // Determine if wall is horizontal or vertical based on which dimension is larger
-            let isHorizontal = width > height;
-            
-            
-            
-            this.canvas2d.renderAll();
+                const pointer = this.canvas2d.getPointer(e.e);
+                
+                // Remove the temporary visual wall
+                this.canvas2d.remove(this.tempWall);
+                
+                // Calculate width and height
+                const width = Math.abs(pointer.x - this.startPoint.x);
+                const height = Math.abs(pointer.y - this.startPoint.y);
+                
+                this.addWall(
+                    'wall_' + Date.now(),
+                    this.startPoint.x,
+                    this.startPoint.y,
+                    width,
+                    10 // Fixed height for horizontal wall
+                );
+                
+                // Reset wall drawing state
+                this.drawingWall = false;
+                this.startPoint = null;
+                this.tempWall = null;
+                
+                // Switch back to select tool after drawing
+                if (this.activeWallDrawing) {
+                    this.activeWallDrawing = false;
+                    this.activateTool('select');
+                }
             }
         });
     }
-
+    
     /**
      * Set up keyboard event handlers
      */
@@ -381,14 +432,14 @@ class App {
                 }
             }
             
-            if(e.key === 'Delete') { 
+            if (e.key === 'Delete') { 
                 const activeObjects = this.canvas2d.getActiveObjects();                
                 activeObjects.forEach(obj => {
                     this.canvas2d.remove(obj);
                 });            
             }
             
-            if(e.key === 'Escape' && this.drawingWall) {
+            if (e.key === 'Escape' && this.drawingWall) {
                 // Cancel wall drawing
                 if (this.tempWall) {
                     this.canvas2d.remove(this.tempWall);
@@ -404,7 +455,7 @@ class App {
                 }
             }
         });
-          
+        
         document.addEventListener('keyup', (e) => {
             if (e.key === 'Control') {
                 this.keyboardCtrl = false;
@@ -418,393 +469,6 @@ class App {
             }
         });
     }
-
-    /**
-     * Find the nearest wall endpoint within snapping threshold
-     * @param {Object} point - The current pointer position {x, y}
-     * @returns {Object} The snapped point or original point if no snap
-     */
-    findNearestWallEndpoint(point) {
-        const walls = this.canvas2d.getObjects().filter(obj => 
-            obj.officeObject && obj.officeObject.type === 'wall'
-        );
-        
-        let nearestPoint = { x: point.x, y: point.y };
-        let minDistance = this.snapThreshold;
-        
-        walls.forEach(wall => {
-            // Get the wall's coordinates
-            const wallLeft = wall.left;
-            const wallTop = wall.top;
-            const wallWidth = wall.width * wall.scaleX;
-            const wallHeight = wall.height * wall.scaleY;
-            const angle = wall.angle * (Math.PI / 180);
-            
-            // Calculate the four corners of the wall
-            const halfWidth = wallWidth / 2;
-            const halfHeight = wallHeight / 2;
-            
-            // Define corners relative to center
-            const corners = [
-                { x: -halfWidth, y: -halfHeight },
-                { x: halfWidth, y: -halfHeight },
-                { x: halfWidth, y: halfHeight },
-                { x: -halfWidth, y: halfHeight }
-            ];
-            
-            // Transform corners based on rotation and position
-            corners.forEach(corner => {
-                // Apply rotation
-                const rotatedX = corner.x * Math.cos(angle) - corner.y * Math.sin(angle);
-                const rotatedY = corner.x * Math.sin(angle) + corner.y * Math.cos(angle);
-                
-                // Apply position offset
-                const worldX = rotatedX + wallLeft;
-                const worldY = rotatedY + wallTop;
-                
-                // Calculate distance to this corner
-                const distance = Math.sqrt(
-                    Math.pow(point.x - worldX, 2) + 
-                    Math.pow(point.y - worldY, 2)
-                );
-                
-                // If this corner is closer than our current nearest, update
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    nearestPoint = { x: worldX, y: worldY };
-                }
-            });
-        });
-        
-        return nearestPoint;
-    }
-    
-    /**
-     * Handle wall endpoint snapping during movement
-     * @param {fabric.Object} wall - The wall being moved
-     */
-    handleWallMovementSnapping(wall) {
-        if (!this.keyboardCtrl || !this.wallToWallSnap) return;
-        
-        // Get all other walls to snap to
-        const otherWalls = this.canvas2d.getObjects().filter(obj => 
-            obj !== wall && obj.officeObject && obj.officeObject.type === 'wall'
-        );
-        
-        if (otherWalls.length === 0) return;
-        
-        // Calculate the four corners of the moving wall
-        const wallLeft = wall.left;
-        const wallTop = wall.top;
-        const wallWidth = wall.width * wall.scaleX;
-        const wallHeight = wall.height * wall.scaleY;
-        const angle = wall.angle * (Math.PI / 180);
-        
-        // Define corners relative to center
-        const halfWidth = wallWidth / 2;
-        const halfHeight = wallHeight / 2;
-        
-        const corners = [
-            { x: -halfWidth, y: -halfHeight },
-            { x: halfWidth, y: -halfHeight },
-            { x: halfWidth, y: halfHeight },
-            { x: -halfWidth, y: halfHeight }
-        ];
-        
-        // Transform corners based on rotation and position
-        const worldCorners = corners.map(corner => {
-            // Apply rotation
-            const rotatedX = corner.x * Math.cos(angle) - corner.y * Math.sin(angle);
-            const rotatedY = corner.x * Math.sin(angle) + corner.y * Math.cos(angle);
-            
-            // Apply position offset
-            return {
-                x: rotatedX + wallLeft,
-                y: rotatedY + wallTop
-            };
-        });
-        
-        // Check each corner of moving wall against each corner of other walls
-        let bestSnapDistance = this.snapThreshold;
-        let bestSnapDelta = { x: 0, y: 0 };
-        
-        worldCorners.forEach(movingCorner => {
-            otherWalls.forEach(otherWall => {
-                // Calculate corners of the other wall
-                const otherLeft = otherWall.left;
-                const otherTop = otherWall.top;
-                const otherWidth = otherWall.width * otherWall.scaleX;
-                const otherHeight = otherWall.height * otherWall.scaleY;
-                const otherAngle = otherWall.angle * (Math.PI / 180);
-                
-                // Define corners relative to center
-                const otherHalfWidth = otherWidth / 2;
-                const otherHalfHeight = otherHeight / 2;
-                
-                const otherCorners = [
-                    { x: -otherHalfWidth, y: -otherHalfHeight },
-                    { x: otherHalfWidth, y: -otherHalfHeight },
-                    { x: otherHalfWidth, y: otherHalfHeight },
-                    { x: -otherHalfWidth, y: otherHalfHeight }
-                ];
-                
-                // Transform corners based on rotation and position
-                otherCorners.forEach(otherCorner => {
-                    // Apply rotation
-                    const rotatedX = otherCorner.x * Math.cos(otherAngle) - otherCorner.y * Math.sin(otherAngle);
-                    const rotatedY = otherCorner.x * Math.sin(otherAngle) + otherCorner.y * Math.cos(otherAngle);
-                    
-                    // Apply position offset
-                    const worldX = rotatedX + otherLeft;
-                    const worldY = rotatedY + otherTop;
-                    
-                    // Calculate distance between corners
-                    const dx = movingCorner.x - worldX;
-                    const dy = movingCorner.y - worldY;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    
-                    // If this corner is within snap threshold and closer than previous best
-                    if (distance < bestSnapDistance) {
-                        bestSnapDistance = distance;
-                        bestSnapDelta = { x: dx, y: dy };
-                    }
-                });
-            });
-        });
-        
-        // Apply the snap if we found a good match
-        if (bestSnapDistance < this.snapThreshold) {
-            wall.set({
-                left: wall.left - bestSnapDelta.x,
-                top: wall.top - bestSnapDelta.y
-            });
-            
-            // Show visual feedback
-            this.showSnapFeedback(wall.left, wall.top);
-        }
-    }
-    
-    /**
-     * Handle object-to-wall snapping
-     * @param {fabric.Object} obj - The object being moved
-     */
-    handleObjectToWallSnapping(obj) {
-        if (!this.keyboardCtrl || !this.objectToWallSnap) return;
-        
-        // Get all walls for snapping and collision detection
-        const walls = this.canvas2d.getObjects().filter(w => 
-            w.officeObject && w.officeObject.type === 'wall'
-        );
-        
-        if (walls.length === 0) return;
-        
-        // Store the current position as potentially valid
-        obj.lastValidLeft = obj.left;
-        obj.lastValidTop = obj.top;
-        
-        // Check for collision with walls
-        // if (this.checkObjectWallCollision(obj)) {
-        //     // If collision detected, push object away from wall
-        //     this.pushObjectFromWalls(obj, walls);
-        // } else {
-        //     // No collision, try to snap to nearby walls
-        //     this.snapObjectToNearbyWalls(obj, walls);
-        // }
-    }
-    
-    /**
-     * Check if an object collides with any wall
-     * @param {fabric.Object} obj - The object to check
-     * @returns {boolean} True if collision detected
-     */
-    checkObjectWallCollision(obj) {
-        // Get the object's bounding box in world coordinates
-        const objBounds = obj.getBoundingRect();
-        
-        // Get all walls
-        const walls = this.canvas2d.getObjects().filter(w => 
-            w.officeObject && w.officeObject.type === 'wall'
-        );
-        
-        // Check intersection with each wall
-        for (const wall of walls) {
-            const wallBounds = wall.getBoundingRect();
-            
-            // Simple rectangular intersection check
-            if (this.rectanglesIntersect(objBounds, wallBounds)) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Check if two rectangles intersect
-     * @param {Object} rect1 - First rectangle {left, top, width, height}
-     * @param {Object} rect2 - Second rectangle {left, top, width, height}
-     * @returns {boolean} True if rectangles intersect
-     */
-    rectanglesIntersect(rect1, rect2) {
-        return !(
-            rect1.left + rect1.width < rect2.left ||
-            rect2.left + rect2.width < rect1.left ||
-            rect1.top + rect1.height < rect2.top ||
-            rect2.top + rect2.height < rect1.top
-        );
-    }
-    
-    /**
-     * Push an object away from intersecting walls
-     * @param {fabric.Object} obj - The object to adjust
-     * @param {Array} walls - The walls to check against
-     */
-    pushObjectFromWalls(obj, walls) {
-        const objBounds = obj.getBoundingRect();
-        let adjustX = 0;
-        let adjustY = 0;
-        
-        walls.forEach(wall => {
-            const wallBounds = wall.getBoundingRect();
-            
-            if (this.rectanglesIntersect(objBounds, wallBounds)) {
-                // Calculate overlap on each axis
-                const overlapLeft = objBounds.left + objBounds.width - wallBounds.left;
-                const overlapRight = wallBounds.left + wallBounds.width - objBounds.left;
-                const overlapTop = objBounds.top + objBounds.height - wallBounds.top;
-                const overlapBottom = wallBounds.top + wallBounds.height - objBounds.top;
-                
-                // Find the smallest overlap
-                const minOverlapX = Math.min(overlapLeft, overlapRight);
-                const minOverlapY = Math.min(overlapTop, overlapBottom);
-                
-                // Push in the direction of smallest overlap
-                if (minOverlapX < minOverlapY) {
-                    // Push horizontally
-                    if (overlapLeft < overlapRight) {
-                        adjustX = Math.min(adjustX, -overlapLeft);
-                    } else {
-                        adjustX = Math.max(adjustX, overlapRight);
-                    }
-                } else {
-                    // Push vertically
-                    if (overlapTop < overlapBottom) {
-                        adjustY = Math.min(adjustY, -overlapTop);
-                    } else {
-                        adjustY = Math.max(adjustY, overlapBottom);
-                    }
-                }
-            }
-        });
-        
-        // Apply the adjustments
-        if (adjustX !== 0 || adjustY !== 0) {
-            obj.set({
-                left: obj.left + adjustX,
-                top: obj.top + adjustY
-            });
-            
-            // Update the canvas
-            this.canvas2d.renderAll();
-        }
-    }
-    
-    /**
-     * Snap an object to nearby walls
-     * @param {fabric.Object} obj - The object to snap
-     * @param {Array} walls - The walls to snap to
-     */
-    snapObjectToNearbyWalls(obj, walls) {
-        const objBounds = obj.getBoundingRect();
-        let bestSnapDistance = this.snapThreshold;
-        let bestSnapPosition = null;
-        
-        walls.forEach(wall => {
-            const wallBounds = wall.getBoundingRect();
-            
-            // Check each edge of the object against each edge of the wall
-            // Here we're focusing on aligning the object with the wall
-            
-            // Object right edge to wall left edge
-            const distRightToLeft = Math.abs(objBounds.left + objBounds.width - wallBounds.left);
-            if (distRightToLeft < bestSnapDistance && 
-                this.verticalOverlap(objBounds, wallBounds)) {
-                bestSnapDistance = distRightToLeft;
-                bestSnapPosition = {
-                    left: wallBounds.left - objBounds.width + (obj.left - objBounds.left),
-                    top: obj.top
-                };
-            }
-            
-            // Object left edge to wall right edge
-            const distLeftToRight = Math.abs(objBounds.left - (wallBounds.left + wallBounds.width));
-            if (distLeftToRight < bestSnapDistance && 
-                this.verticalOverlap(objBounds, wallBounds)) {
-                bestSnapDistance = distLeftToRight;
-                bestSnapPosition = {
-                    left: wallBounds.left + wallBounds.width + (obj.left - objBounds.left),
-                    top: obj.top
-                };
-            }
-            
-            // Object bottom edge to wall top edge
-            const distBottomToTop = Math.abs(objBounds.top + objBounds.height - wallBounds.top);
-            if (distBottomToTop < bestSnapDistance && 
-                this.horizontalOverlap(objBounds, wallBounds)) {
-                bestSnapDistance = distBottomToTop;
-                bestSnapPosition = {
-                    left: obj.left,
-                    top: wallBounds.top - objBounds.height + (obj.top - objBounds.top)
-                };
-            }
-            
-            // Object top edge to wall bottom edge
-            const distTopToBottom = Math.abs(objBounds.top - (wallBounds.top + wallBounds.height));
-            if (distTopToBottom < bestSnapDistance && 
-                this.horizontalOverlap(objBounds, wallBounds)) {
-                bestSnapDistance = distTopToBottom;
-                bestSnapPosition = {
-                    left: obj.left,
-                    top: wallBounds.top + wallBounds.height + (obj.top - objBounds.top)
-                };
-            }
-        });
-        
-        // Apply the best snap position if found
-        if (bestSnapPosition) {
-            obj.set(bestSnapPosition);
-            this.showSnapFeedback(bestSnapPosition.left, bestSnapPosition.top);
-            
-            // Update the canvas
-            this.canvas2d.renderAll();
-        }
-    }
-    
-    // /**
-    //  * Check if two rectangles overlap vertically
-    //  * @param {Object} rect1 - First rectangle
-    //  * @param {Object} rect2 - Second rectangle
-    //  * @returns {boolean} True if rectangles overlap vertically
-    //  */
-    // verticalOverlap(rect1, rect2) {
-    //     return !(
-    //         rect1.top + rect1.height <= rect2.top ||
-    //         rect2.top + rect2.height <= rect1.top
-    //     );
-    // }
-    
-    // /**
-    //  * Check if two rectangles overlap horizontally
-    //  * @param {Object} rect1 - First rectangle
-    //  * @param {Object} rect2 - Second rectangle
-    //  * @returns {boolean} True if rectangles overlap horizontally
-    //  */
-    // horizontalOverlap(rect1, rect2) {
-    //     return !(
-    //         rect1.left + rect1.width <= rect2.left ||
-    //         rect2.left + rect2.width <= rect1.left
-    //     );
-    // }
     
     /**
      * Snap an object to the grid
@@ -845,29 +509,7 @@ class App {
             this.canvas2d.renderAll();
         }, 300);
     }
-
-    /**
-     * Convert screen coordinates to canvas world coordinates
-     */
-    screenToWorld(screenX, screenY) {
-        const canvas = document.getElementById('canvas-2d');
-        const rect = canvas.getBoundingClientRect();
-        const canvasX = screenX - rect.left;
-        const canvasY = screenY - rect.top;
-        
-        // Get inverse transform to convert from screen to canvas coordinates
-        const transform = this.canvas2d.viewportTransform;
-        const inverseTransform = fabric.util.invertTransform(transform);
-        
-        // Apply the inverse transform to get world coordinates
-        const point = fabric.util.transformPoint(
-            { x: canvasX, y: canvasY },
-            inverseTransform
-        );
-        
-        return point;
-    }
-
+    
     /**
      * Handle mouse wheel events for zooming
      */
@@ -896,66 +538,98 @@ class App {
     }
     
     /**
+     * Convert screen coordinates to canvas world coordinates
+     */
+    screenToWorld(screenX, screenY) {
+        if (!this.canvas2d) return { x: 0, y: 0 };
+        
+        const canvas = document.getElementById('canvas-2d');
+        if (!canvas) return { x: 0, y: 0 };
+        
+        const rect = canvas.getBoundingClientRect();
+        const canvasX = screenX - rect.left;
+        const canvasY = screenY - rect.top;
+        
+        // Get inverse transform to convert from screen to canvas coordinates
+        const transform = this.canvas2d.viewportTransform;
+        const inverseTransform = fabric.util.invertTransform(transform);
+        
+        // Apply the inverse transform to get world coordinates
+        const point = fabric.util.transformPoint(
+            { x: canvasX, y: canvasY },
+            inverseTransform
+        );
+        
+        return point;
+    }
+    
+    /**
      * Add a desk with chair to the canvas
      */
     addDeskWithChair(id, x, y, rotation = 0, options = {}) {
+        if (!this.canvas2d) return null;
+        
         const position = { x, y, z: y }; // Use y as z for 3D positioning
         const rotationObj = { x: 0, y: rotation * Math.PI / 180, z: 0 };
         const deskWithChair = new DeskWithChair(id, position, rotationObj, options);
-        const fabricObject = deskWithChair.createFabricObject(this.canvas2d);
         
-        // Add collision handling attributes
-        if (fabricObject) {
-            fabricObject.lastValidLeft = fabricObject.left;
-            fabricObject.lastValidTop = fabricObject.top;
-            fabricObject.lastRotation = fabricObject.angle;
+        try {
+            const fabricObject = deskWithChair.createFabricObject(this.canvas2d);
+            
+            // Add collision handling attributes
+            if (fabricObject) {
+                fabricObject.lastValidLeft = fabricObject.left;
+                fabricObject.lastValidTop = fabricObject.top;
+                fabricObject.lastRotation = fabricObject.angle;
+            }
+            
+            // Store in objects array
+            this.objects.push(deskWithChair);
+            
+            return deskWithChair;
+        } catch (error) {
+            console.error('Failed to add desk with chair:', error);
+            return null;
         }
-        
-        // Store in objects array
-        this.objects.push(deskWithChair);
-        
-        return deskWithChair;
     }
-
+    
     /**
      * Add a desk to the canvas
      */
     addDesk(id, x, y, rotation = 0, options = {}) {
+        if (!this.canvas2d) return null;
+        
         const position = { x, y, z: y }; // Use y as z for 3D positioning
         const rotationObj = { x: 0, y: rotation * Math.PI / 180, z: 0 };
         const desk = new Desk(id, position, rotationObj, options);
-        const fabricObject = desk.createFabricObject(this.canvas2d);
-
-        // Add collision handling attributes
-        if (fabricObject) {
-            fabricObject.lastValidLeft = fabricObject.left;
-            fabricObject.lastValidTop = fabricObject.top;
-            fabricObject.lastRotation = fabricObject.angle;
-        }
         
-        // Store in objects array
-        this.objects.push(desk);
-
-        return desk;
+        try {
+            const fabricObject = desk.createFabricObject(this.canvas2d);
+            
+            // Add collision handling attributes
+            if (fabricObject) {
+                fabricObject.lastValidLeft = fabricObject.left;
+                fabricObject.lastValidTop = fabricObject.top;
+                fabricObject.lastRotation = fabricObject.angle;
+            }
+            
+            // Store in objects array
+            this.objects.push(desk);
+            
+            return desk;
+        } catch (error) {
+            console.error('Failed to add desk:', error);
+            return null;
+        }
     }
-
+    
     /**
      * Add a wall to the canvas
      */
     addWall(id, startX, startY, width, height, options = {}) {
-        // Determine if this is a point-to-point wall drawing or dimensions-based
-        let position, dimensions;
+        if (!this.canvas2d) return null;
         
-        // if (typeof width === 'number' && typeof height === 'number') {
-        //     // Dimensions-based wall
-        //     position = { x: startX, y: 0, z: startY };
-        //     dimensions = { 
-        //         width: width,
-        //         height: options.height || 250, 
-        //         depth: height 
-        //     };
-        // } else {
-            // Point-to-point wall drawing (endX = width, endY = height)
+        try {
             const endX = width;
             const endY = height;
             
@@ -969,38 +643,41 @@ class App {
             // Calculate rotation angle in degrees
             const angle = Math.atan2(endY - startY, endX - startX) * (180 / Math.PI);
             
-            position = { x: midX, y: 0, z: midY };
-            dimensions = { 
+            const position = { x: midX, y: 0, z: midY };
+            const dimensions = { 
                 width: wallWidth,
                 height: options.height || 250, 
                 depth: options.thickness || 10 
             };
             options.angle = angle;
-        // }
-        
-        // Create wall
-        const rotationObj = { 
-            x: 0, 
-            y: (options.angle || 0) * Math.PI / 180, 
-            z: 0 
-        };
-        
-        const wallOptions = {
-            ...options,
-            thickness: options.thickness || 10,
-            color: options.color || '#e8e8e8'
-        };
-        
-        // Create and add the wall
-        const wall = new Wall(id, position, rotationObj, dimensions, wallOptions);
-        wall.createFabricObject(this.canvas2d);
-        
-        // Add to objects array if not already tracking
-        if (!this.objects.includes(wall)) {
-            this.objects.push(wall);
+            
+            // Create wall
+            const rotationObj = { 
+                x: 0, 
+                y: (options.angle || 0) * Math.PI / 180, 
+                z: 0 
+            };
+            
+            const wallOptions = {
+                ...options,
+                thickness: options.thickness || 10,
+                color: options.color || '#e8e8e8'
+            };
+            
+            // Create and add the wall
+            const wall = new Wall(id, position, rotationObj, dimensions, wallOptions);
+            wall.createFabricObject(this.canvas2d);
+            
+            // Add to objects array if not already tracking
+            if (!this.objects.includes(wall)) {
+                this.objects.push(wall);
+            }
+            
+            return wall;
+        } catch (error) {
+            console.error('Failed to add wall:', error);
+            return null;
         }
-        
-        return wall;
     }
     
     /**
@@ -1023,6 +700,12 @@ class App {
         
         if (document.getElementById('canvas-3d-container')) {
             document.getElementById('canvas-3d-container').classList.toggle('active', mode === '3d');
+            
+            // Initialize 3D view if needed
+            if (mode === '3d' && this.canvas3d) {
+                // Sync 3D view with 2D objects
+                this.updateThreeFromFabric();
+            }
         }
         
         if (document.getElementById('panorama-container')) {
@@ -1038,6 +721,24 @@ class App {
     }
     
     /**
+     * Update 3D view from 2D canvas
+     */
+    updateThreeFromFabric() {
+        if (!this.canvas3d || !this.objects.length) return;
+        
+        // Clear 3D scene
+        this.canvas3d.clear();
+        
+        // Add floor
+        this.canvas3d.addFloor();
+        
+        // Add all objects to 3D scene
+        this.objects.forEach(obj => {
+            obj.createThreeObject(this.canvas3d.scene);
+        });
+    }
+    
+    /**
      * Activate a tool based on button click
      */
     activateTool(toolName) {
@@ -1048,7 +749,7 @@ class App {
         
         // Activate the selected tool
         const toolButton = document.getElementById(`${toolName}-tool`) || 
-                        document.getElementById(toolName);
+            document.getElementById(toolName);
         
         if (toolButton) {
             toolButton.classList.add('active');
@@ -1108,11 +809,11 @@ class App {
                 const addDeskChairHandler = (e) => {
                     // Get coordinates in canvas space
                     const pointer = this.canvas2d.getPointer(e.e);
-
+                    
                     // Apply grid snapping if Ctrl is pressed
                     let x = pointer.x;
                     let y = pointer.y;
-
+                    
                     if (this.keyboardCtrl) {
                         x = Math.round(x / this.gridSize) * this.gridSize;
                         y = Math.round(y / this.gridSize) * this.gridSize;
@@ -1120,25 +821,15 @@ class App {
                     
                     // Add desk at the pointer position
                     const deskWithChair = this.addDeskWithChair(
-                        'desk_' + Date.now(), 
+                        'seat_' + Date.now(), 
                         x, 
                         y
                     );
                     
                     // Add to objects array if not already tracking
-                    if (this.objects && !this.objects.includes(deskWithChair)) {
+                    if (this.objects && !this.objects.includes(deskWithChair) && deskWithChair) {
                         this.objects.push(deskWithChair);
                     }
-                    
-                    // // Check for collision with walls
-                    // const fabricObj = deskWithChair.fabricObject;
-                    // if (fabricObj && this.checkObjectWallCollision(fabricObj)) {
-                    //     this.canvas2d.remove(fabricObj);
-                    //     this.objects.pop(); // Remove from objects array
-                        
-                    //     // Show error feedback
-                    //     this.showPlacementError(x, y);
-                    // }
                     
                     // Remove this event handler after first use
                     this.canvas2d.off('mouse:down', addDeskChairHandler);
@@ -1173,58 +864,128 @@ class App {
                 this.setupWallDrawing();
                 console.log('Add wall tool activated');
                 break;
-
-            // Add more tools as needed
+                
+            case 'delete':
+                // Set canvas to selection mode
+                this.canvas2d.selection = true;
+                // Set cursor to indicate delete mode
+                document.body.style.cursor = 'url(images/delete-cursor.png), auto';
+                
+                // Set up click handler for deleting objects
+                const deleteHandler = (e) => {
+                    // Get the object under the cursor
+                    const pointer = this.canvas2d.getPointer(e.e);
+                    const objects = this.canvas2d.getObjects();
+                    
+                    // Find object at this position (in reverse order to get top-most)
+                    for (let i = objects.length - 1; i >= 0; i--) {
+                        const obj = objects[i];
+                        if (obj.containsPoint(pointer)) {
+                            // Remove from canvas
+                            this.canvas2d.remove(obj);
+                            
+                            // Remove from objects array
+                            if (obj.officeObject) {
+                                const index = this.objects.indexOf(obj.officeObject);
+                                if (index !== -1) {
+                                    this.objects.splice(index, 1);
+                                }
+                            }
+                            
+                            break;
+                        }
+                    }
+                };
+                
+                // Clear any existing handlers and add new one
+                this.canvas2d.off('mouse:down');
+                this.canvas2d.on('mouse:down', deleteHandler);
+                
+                console.log('Delete tool activated');
+                break;
+                
+            default:
+                console.log(`Unknown tool: ${toolName}`);
         }
     }
     
     /**
-     * Show error indicator when object can't be placed
+     * Cancel wall drawing in progress
      */
-    showPlacementError(x, y) {
-        // Create a temporary error indicator
-        const errorIndicator = new fabric.Circle({
-            left: x - 15,
-            top: y - 15,
-            radius: 15,
-            fill: 'rgba(255, 0, 0, 0.5)',
-            stroke: 'rgba(255, 0, 0, 0.8)',
-            strokeWidth: 2,
-            selectable: false,
-            evented: false
-        });
+    cancelWallDrawing() {
+        this.cleanupWallDrawingVisuals();
+        this.wallDrawingStartPoint = null;
+        this.cleanupWallDrawingHandlers();
         
-        this.canvas2d.add(errorIndicator);
+        // Reset cursor
+        document.body.style.cursor = 'default';
+    }
+    
+    /**
+     * Clean up all wall drawing visual elements (preview, markers, etc.)
+     */
+    cleanupWallDrawingVisuals() {
+        if (!this.canvas2d) return;
         
-        // Add a cross inside
-        const line1 = new fabric.Line([x-10, y-10, x+10, y+10], {
-            stroke: 'rgba(255, 0, 0, 0.8)',
-            strokeWidth: 2,
-            selectable: false,
-            evented: false
-        });
+        // Remove preview line
+        if (this.wallDrawingPreview) {
+            this.canvas2d.remove(this.wallDrawingPreview);
+            this.wallDrawingPreview = null;
+        }
         
-        const line2 = new fabric.Line([x+10, y-10, x-10, y+10], {
-            stroke: 'rgba(255, 0, 0, 0.8)',
-            strokeWidth: 2,
-            selectable: false,
-            evented: false
-        });
+        // Remove start marker
+        if (this.wallDrawingStartMarker) {
+            this.canvas2d.remove(this.wallDrawingStartMarker);
+            this.wallDrawingStartMarker = null;
+        }
         
-        this.canvas2d.add(line1);
-        this.canvas2d.add(line2);
+        // Remove length text
+        if (this.wallLengthText) {
+            this.canvas2d.remove(this.wallLengthText);
+            this.wallLengthText = null;
+        }
         
-        // Remove after a short delay
-        setTimeout(() => {
-            this.canvas2d.remove(errorIndicator, line1, line2);
-            this.canvas2d.renderAll();
-        }, 800);
-    }   
+        // Remove angle text
+        if (this.angleText) {
+            this.canvas2d.remove(this.angleText);
+            this.angleText = null;
+        }
+        
+        this.canvas2d.renderAll();
+    }
+    
+    /**
+     * Clean up wall drawing event handlers
+     */
+    cleanupWallDrawingHandlers() {
+        if (!this.canvas2d) return;
+        
+        // Remove all possible event handlers
+        if (this.firstClickHandler) {
+            this.canvas2d.off('mouse:down', this.firstClickHandler);
+        }
+        
+        if (this.wallPreviewHandler) {
+            this.canvas2d.off('mouse:move', this.wallPreviewHandler);
+        }
+        
+        if (this.secondClickHandler) {
+            this.canvas2d.off('mouse:down', this.secondClickHandler);
+        }
+        
+        // Remove key handlers
+        if (this.snapToggleHandler) {
+            document.removeEventListener('keydown', this.snapToggleHandler);
+            document.removeEventListener('keyup', this.snapToggleHandler);
+        }
+    }
     
     /**
      * Set up wall drawing interaction with angle snapping
      */
     setupWallDrawing() {
+        if (!this.canvas2d) return;
+        
         // Create a cursor style for the wall drawing mode
         document.body.style.cursor = 'crosshair';
         
@@ -1242,7 +1003,6 @@ class App {
             
             // Store the start point
             this.wallDrawingStartPoint = { x: pointer.x, y: pointer.y };
-
             
             // Add a marker at the start point for better visualization
             const startMarker = new fabric.Circle({
@@ -1426,7 +1186,7 @@ class App {
             let angle = Math.atan2(dy, dx) * (180 / Math.PI);
             let length = Math.sqrt(dx * dx + dy * dy);
 
-             // CHANGE: Check for Ctrl key to enable snapping
+            // CHANGE: Check for Ctrl key to enable snapping
             this.angleSnapEnabled = this.keyboardCtrl;
             
             // Apply angle snapping if enabled
@@ -1489,11 +1249,13 @@ class App {
         // Set up the first click handler
         this.canvas2d.on('mouse:down', this.firstClickHandler);
     }
-
+    
     /**
      * Display a status message temporarily
      */
     showStatusMessage(message, duration = 2000) {
+        if (!this.canvas2d) return;
+        
         // If we already have a status message, remove it
         if (this.statusMessage) {
             this.canvas2d.remove(this.statusMessage);
@@ -1530,94 +1292,19 @@ class App {
             }
         }, duration);
     }
-
-    /**
-     * Clean up wall drawing event handlers
-     */
-    cleanupWallDrawingHandlers() {
-        // Remove all possible event handlers
-        if (this.firstClickHandler) {
-            this.canvas2d.off('mouse:down', this.firstClickHandler);
-        }
-        
-        if (this.wallPreviewHandler) {
-            this.canvas2d.off('mouse:move', this.wallPreviewHandler);
-        }
-        
-        if (this.secondClickHandler) {
-            this.canvas2d.off('mouse:down', this.secondClickHandler);
-        }
-        
-        // Remove key handlers
-        if (this.snapToggleHandler) {
-            document.removeEventListener('keydown', this.snapToggleHandler);
-            document.removeEventListener('keyup', this.snapToggleHandler);
-        }
-    }
-
-    /**
-     * Cancel wall drawing in progress
-     */
-    cancelWallDrawing() {
-        this.cleanupWallDrawingVisuals();
-        this.wallDrawingStartPoint = null;
-        this.cleanupWallDrawingHandlers();
-        
-        // Reset cursor
-        document.body.style.cursor = 'default';
-        
-        // Clear last mouse move event
-        this.lastMouseMoveEvent = null;
-    }
-
-    /**
-     * Clean up all wall drawing visual elements (preview, markers, etc.)
-     */
-    cleanupWallDrawingVisuals() {
-        // Remove preview line
-        if (this.wallDrawingPreview) {
-            this.canvas2d.remove(this.wallDrawingPreview);
-            this.wallDrawingPreview = null;
-        }
-        
-        // Remove start marker
-        if (this.wallDrawingStartMarker) {
-            this.canvas2d.remove(this.wallDrawingStartMarker);
-            this.wallDrawingStartMarker = null;
-        }
-        
-        // Remove length text
-        if (this.wallLengthText) {
-            this.canvas2d.remove(this.wallLengthText);
-            this.wallLengthText = null;
-        }
-        
-        // Remove angle text
-        if (this.angleText) {
-            this.canvas2d.remove(this.angleText);
-            this.angleText = null;
-        }
-        
-        // Remove status message if present
-        if (this.statusMessage) {
-            this.canvas2d.remove(this.statusMessage);
-            this.statusMessage = null;
-            if (this.statusMessageTimeout) {
-                clearTimeout(this.statusMessageTimeout);
-            }
-        }
-        
-        this.canvas2d.renderAll();
-    }
     
     /**
      * Zoom in on the canvas
      */
     zoomIn() {
         if (this.activeMode === '2d' && this.canvas2d) {
-            this.canvas2d.setZoom(this.canvas2d.getZoom() * 1.1);
+            const currentZoom = this.canvas2d.getZoom();
+            const newZoom = Math.min(5, currentZoom * 1.1);
+            this.canvas2d.setZoom(newZoom);
+            this.canvas2d.renderAll();
+        } else if (this.activeMode === '3d' && this.canvas3d) {
+            this.canvas3d.zoomIn();
         }
-        // TODO: Add 3D zoom when implemented
     }
     
     /**
@@ -1625,9 +1312,13 @@ class App {
      */
     zoomOut() {
         if (this.activeMode === '2d' && this.canvas2d) {
-            this.canvas2d.setZoom(this.canvas2d.getZoom() * 0.9);
+            const currentZoom = this.canvas2d.getZoom();
+            const newZoom = Math.max(0.2, currentZoom * 0.9);
+            this.canvas2d.setZoom(newZoom);
+            this.canvas2d.renderAll();
+        } else if (this.activeMode === '3d' && this.canvas3d) {
+            this.canvas3d.zoomOut();
         }
-        // TODO: Add 3D zoom when implemented
     }
     
     /**
@@ -1637,12 +1328,14 @@ class App {
         if (this.activeMode === '2d' && this.canvas2d) {
             this.canvas2d.setZoom(1);
             this.canvas2d.setViewportTransform([1, 0, 0, 1, 0, 0]);
+            this.canvas2d.renderAll();
+        } else if (this.activeMode === '3d' && this.canvas3d) {
+            this.canvas3d.resetCamera();
         }
-        // TODO: Add 3D reset when implemented
     }
     
     /**
-     * Save the current layout
+     * Save the current layout using the location manager
      */
     saveLayout() {
         try {
@@ -1650,24 +1343,16 @@ class App {
                 // Use location manager to save layout for current floor
                 this.locationManager.saveCurrentLayout();
             } else {
-                // Fallback to local storage
-                const layout = {
-                    objects: this.objects.map(obj => obj.toJSON()),
-                    timestamp: new Date().toISOString()
-                };
-                
-                localStorage.setItem('savedLayout', JSON.stringify(layout));
-                console.log('Layout saved locally');
-                alert('Layout saved successfully');
+                this.showError('No floor selected. Please select a floor first.');
             }
         } catch (error) {
             console.error('Failed to save layout:', error);
-            alert('Failed to save layout: ' + error.message);
+            this.showError('Failed to save layout: ' + error.message);
         }
     }
     
     /**
-     * Load a previously saved layout
+     * Load a layout using the location manager
      */
     loadLayout() {
         try {
@@ -1675,96 +1360,12 @@ class App {
                 // Use location manager to load layout for current floor
                 this.locationManager.loadFloorLayout(this.locationManager.selectedFloor);
             } else {
-                // Fallback to local storage
-                const savedLayout = localStorage.getItem('savedLayout');
-                if (!savedLayout) {
-                    alert('No saved layout found');
-                    return;
-                }
-                
-                const layoutData = JSON.parse(savedLayout);
-                
-                // Clear existing objects
-                this.canvas2d.clear();
-                this.objects = [];
-                
-                // Create objects from layout data
-                layoutData.objects.forEach(obj => {
-                    const position = { x: obj.position.x, y: obj.position.y, z: obj.position.z };
-                    const rotation = { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z };
-                    const options = obj.options || {};
-                    
-                    // Create the object based on type
-                    if (obj.type === 'wall') {
-                        this.addWall(
-                            obj.id,
-                            position.x,
-                            position.z,
-                            obj.dimensions.width,
-                            obj.dimensions.depth,
-                            { 
-                                ...options,
-                                angle: rotation.y * (180 / Math.PI)
-                            }
-                        );
-                    } else if (obj.type === 'desk') {
-                        this.addDesk(
-                            obj.id,
-                            position.x,
-                            position.z,
-                            rotation.y * (180 / Math.PI),
-                            options
-                        );
-                    } else if (obj.type === 'deskWithChair') {
-                        this.addDeskWithChair(
-                            obj.id,
-                            position.x,
-                            position.z,
-                            rotation.y * (180 / Math.PI),
-                            options
-                        );
-                    }
-                });
-                
-                console.log('Layout loaded');
-                alert('Layout loaded successfully');
+                this.showError('No floor selected. Please select a floor first.');
             }
         } catch (error) {
             console.error('Failed to load layout:', error);
-            alert('Failed to load layout: ' + error.message);
+            this.showError('Failed to load layout: ' + error.message);
         }
-    }
-    
-    /**
-     * Generate mock users for development
-     */
-    generateMockUsers() {
-        const departments = ['Engineering', 'Sales', 'Marketing', 'HR', 'Finance', 'Design'];
-        const users = [];
-        const localImageBasePath = 'https://randomuser.me/api/portraits/thumb/men/';
-        
-        // Generate 50 mock users
-        for (let i = 1; i <= 50; i++) {
-            const userId = `user${i}`;
-            const firstName = ['John', 'Jane', 'Mike', 'Sarah', 'David', 'Lisa', 'Alex', 'Emma', 'Chris', 'Anna'][i % 10];
-            const lastName = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Miller', 'Davis', 'Garcia', 'Rodriguez', 'Wilson'][i % 10];
-            const department = departments[i % departments.length];
-            
-            // Generate a profile photo URL using a placeholder service
-            // Using i to ensure each user gets a unique image
-            const photoUrl = `${localImageBasePath}${i}.jpg`;
-            
-            users.push(new User(
-                userId,
-                `${firstName} ${lastName}`,
-                `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.com`,
-                department,
-                photoUrl
-            ));
-        }
-        
-        this.users = users;
-        console.log('Generated mock users:', users.length);
     }
     
     /**
@@ -1846,13 +1447,125 @@ class App {
      * Remove the SVG background
      */
     removeSvgBackground() {
-        if (this.svgBackground) {
+        if (this.svgBackground && this.canvas2d) {
             this.canvas2d.remove(this.svgBackground);
             this.svgBackground = null;
+            this.canvas2d.renderAll();
         }
         
         localStorage.removeItem('layoutSvgBackground');
         console.log('SVG background removed');
+    }
+    
+    /**
+     * Generate mock users for development
+     */
+    generateMockUsers() {
+        const departments = ['Engineering', 'Sales', 'Marketing', 'HR', 'Finance', 'Design'];
+        const users = [];
+        const localImageBasePath = 'https://randomuser.me/api/portraits/thumb/men/';
+        
+        // Generate 50 mock users
+        for (let i = 1; i <= 50; i++) {
+            const userId = `user${i}`;
+            const firstName = ['John', 'Jane', 'Mike', 'Sarah', 'David', 'Lisa', 'Alex', 'Emma', 'Chris', 'Anna'][i % 10];
+            const lastName = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Miller', 'Davis', 'Garcia', 'Rodriguez', 'Wilson'][i % 10];
+            const department = departments[i % departments.length];
+            
+            // Generate a profile photo URL using a placeholder service
+            // Using i to ensure each user gets a unique image
+            const photoUrl = `${localImageBasePath}${i}.jpg`;
+            
+            users.push({
+                id: userId,
+                name: `${firstName} ${lastName}`,
+                displayName: `${firstName} ${lastName}`,
+                email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.com`,
+                department,
+                photoUrl
+            });
+        }
+        
+        return users;
+    }
+    
+    // Helper functions for UI feedback
+    
+    showLoading(message = 'Loading...') {
+        let loader = document.querySelector('.loading-indicator');
+        if (!loader) {
+            loader = document.createElement('div');
+            loader.className = 'loading-indicator';
+            loader.innerHTML = `
+                <div class="loading-spinner"></div>
+                <div class="loading-message">${message}</div>
+            `;
+            document.body.appendChild(loader);
+        } else {
+            loader.querySelector('.loading-message').textContent = message;
+            loader.style.display = 'flex';
+        }
+    }
+    
+    hideLoading() {
+        const loader = document.querySelector('.loading-indicator');
+        if (loader) {
+            loader.style.display = 'none';
+        }
+    }
+    
+    showError(message) {
+        this.showNotification(message, 'error');
+    }
+    
+    showSuccess(message) {
+        this.showNotification(message, 'success');
+    }
+    
+    showInfo(message) {
+        this.showNotification(message, 'info');
+    }
+    
+    showNotification(message, type = 'info') {
+        let notification = document.querySelector('.notification');
+        if (!notification) {
+            notification = document.createElement('div');
+            notification.className = 'notification';
+            document.body.appendChild(notification);
+        }
+        
+        notification.textContent = message;
+        notification.className = `notification ${type}`;
+        notification.style.display = 'block';
+        
+        // Add appropriate styling
+        switch (type) {
+            case 'error':
+                notification.style.backgroundColor = '#f44336';
+                notification.style.color = 'white';
+                break;
+            case 'success':
+                notification.style.backgroundColor = '#4CAF50';
+                notification.style.color = 'white';
+                break;
+            case 'info':
+                notification.style.backgroundColor = '#2196F3';
+                notification.style.color = 'white';
+                break;
+        }
+        
+        // Position it
+        notification.style.position = 'fixed';
+        notification.style.top = '20px';
+        notification.style.right = '20px';
+        notification.style.padding = '10px 20px';
+        notification.style.borderRadius = '4px';
+        notification.style.zIndex = '9999';
+        
+        // Hide after 3 seconds
+        setTimeout(() => {
+            notification.style.display = 'none';
+        }, 3000);
     }
 }
 

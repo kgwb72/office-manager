@@ -1,6 +1,8 @@
 class SeatAssignmentManager {
     constructor(app) {
         this.app = app;
+        this.selectedUser = null;
+        this.selectedDesk = null;
         this.setupEventListeners();
     }
     
@@ -9,33 +11,61 @@ class SeatAssignmentManager {
         const searchInput = document.getElementById('search-input');
         const searchResults = document.getElementById('search-results');
         
-        searchInput.addEventListener('input', () => this.handleSearch(searchInput.value));
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
+        }
         
         // Add event listener for desk/chair selection
-        this.app.canvas2d.on('selection:created', (e) => this.handleObjectSelection(e));
-        this.app.canvas2d.on('selection:updated', (e) => this.handleObjectSelection(e));
+        if (this.app.canvas2d) {
+            this.app.canvas2d.on('selection:created', (e) => this.handleObjectSelection(e));
+            this.app.canvas2d.on('selection:updated', (e) => this.handleObjectSelection(e));
+        }
     }
     
-    handleSearch(query) {
+    async handleSearch(query) {
         if (!query || query.length < 2) {
-            document.getElementById('search-results').innerHTML = '';
-            document.getElementById('search-results').classList.remove('active');
+            const searchResults = document.getElementById('search-results');
+            if (searchResults) {
+                searchResults.innerHTML = '';
+                searchResults.classList.remove('active');
+            }
             return;
         }
         
-        // Filter users based on query
-        const filteredUsers = this.app.users.filter(user => {
-            return user.name.toLowerCase().includes(query.toLowerCase()) || 
-                   user.id.toLowerCase().includes(query.toLowerCase()) ||
-                   user.email.toLowerCase().includes(query.toLowerCase());
-        });
-        
-        // Display results
-        this.displaySearchResults(filteredUsers);
+        try {
+            let filteredUsers = [];
+            
+            // If we have a server connection, use the API
+            if (this.app.serverData) {
+                filteredUsers = await this.app.serverData.searchUsers(query);
+            } else {
+                // Filter users from app memory
+                filteredUsers = this.app.users.filter(user => {
+                    return user.name.toLowerCase().includes(query.toLowerCase()) || 
+                           user.id.toLowerCase().includes(query.toLowerCase()) ||
+                           user.email.toLowerCase().includes(query.toLowerCase());
+                });
+            }
+            
+            // Display results
+            this.displaySearchResults(filteredUsers);
+        } catch (error) {
+            console.error('Search error:', error);
+            // Fallback to local search
+            const filteredUsers = this.app.users.filter(user => {
+                return user.name.toLowerCase().includes(query.toLowerCase()) || 
+                       user.id.toLowerCase().includes(query.toLowerCase()) ||
+                       user.email.toLowerCase().includes(query.toLowerCase());
+            });
+            
+            this.displaySearchResults(filteredUsers);
+        }
     }
     
     displaySearchResults(users) {
         const searchResults = document.getElementById('search-results');
+        if (!searchResults) return;
+        
         searchResults.innerHTML = '';
         
         if (users.length === 0) {
@@ -48,8 +78,13 @@ class SeatAssignmentManager {
             const userItem = document.createElement('div');
             userItem.className = 'search-result-item';
             userItem.innerHTML = `
-                <div class="user-name">${user.name}</div>
-                <div class="user-details">${user.email} - ${user.department}</div>
+                <div class="user-photo">
+                    <img src="${user.photoUrl || 'images/default-user.png'}" alt="${user.name}" onerror="this.src='images/default-user.png'">
+                </div>
+                <div class="user-info">
+                    <div class="user-name">${user.name || user.displayName}</div>
+                    <div class="user-details">${user.email} - ${user.department || 'No Department'}</div>
+                </div>
             `;
             
             // Add click event to select this user
@@ -74,7 +109,7 @@ class SeatAssignmentManager {
     }
     
     handleObjectSelection(e) {
-        const selectedObject = e.selected[0];
+        const selectedObject = e.selected?.[0];
         
         if (selectedObject && selectedObject.officeObject && 
             (selectedObject.officeObject.type === 'desk' || selectedObject.officeObject.type === 'deskWithChair')) {
@@ -95,6 +130,8 @@ class SeatAssignmentManager {
     
     updatePropertiesPanel() {
         const propertiesPanel = document.getElementById('object-properties');
+        if (!propertiesPanel) return;
+        
         propertiesPanel.innerHTML = '';
         
         // Show desk information if selected
@@ -115,12 +152,13 @@ class SeatAssignmentManager {
                     <h4>Assigned To</h4>
                     <div class="assigned-user">
                         <div class="user-photo-container">
-                            <img src="${user.photoUrl}" alt="${user.name}" class="user-photo">
+                            <img src="${user.photoUrl || 'images/default-user.png'}" alt="${user.name}" 
+                                 class="user-photo" onerror="this.src='images/default-user.png'">
                         </div>
                         <div class="user-info">
                             <p>${user.name}</p>
                             <p>${user.email}</p>
-                            <p>${user.department}</p>
+                            <p>${user.department || 'No Department'}</p>
                         </div>
                     </div>
                     <button id="remove-assignment" class="tool-btn">Remove Assignment</button>
@@ -158,12 +196,13 @@ class SeatAssignmentManager {
                 <h4>Selected User</h4>
                 <div class="user-info">
                     <div class="user-photo-container">
-                        <img src="${this.selectedUser.photoUrl}" alt="${this.selectedUser.name}" class="user-photo">
+                        <img src="${this.selectedUser.photoUrl || 'images/default-user.png'}" alt="${this.selectedUser.name}" 
+                             class="user-photo" onerror="this.src='images/default-user.png'">
                     </div>
                     <div>
-                        <p>${this.selectedUser.name}</p>
+                        <p>${this.selectedUser.name || this.selectedUser.displayName}</p>
                         <p>${this.selectedUser.email}</p>
-                        <p>${this.selectedUser.department}</p>
+                        <p>${this.selectedUser.department || 'No Department'}</p>
                     </div>
                 </div>
                 <button id="clear-user-selection" class="tool-btn">Clear Selection</button>
@@ -183,45 +222,129 @@ class SeatAssignmentManager {
     
     promptAssignUser(user, desk) {
         // Simple confirmation
-        if (confirm(`Do you want to assign ${user.name} to this desk?`)) {
+        if (confirm(`Do you want to assign ${user.name || user.displayName} to this desk?`)) {
             this.assignUser(user, desk);
         }
     }
     
-    assignUser(user, desk) {
-        // Remove any previous assignment
-        if (user.assignedObject) {
-            user.assignedObject.assignedUser = null;
-            user.assignedObject.updateVisualState();
+    async assignUser(user, desk) {
+        try {
+            // Start loading indicator
+            this.showLoading('Assigning user to seat...');
+            
+            // Extract seat ID from the desk object
+            // Desk ID format is expected to be: seat_123 where 123 is the actual ID
+            const seatIdMatch = desk.id.match(/seat_(\d+)/);
+            let seatId = null;
+            
+            if (seatIdMatch) {
+                seatId = parseInt(seatIdMatch[1]);
+            }
+            
+            // Prepare assignment data
+            const assignmentData = {
+                seatId: seatId,
+                userId: user.id
+            };
+            
+            // If we have a server connection, use the API to assign the seat
+            if (this.app.serverData && seatId) {
+                await this.app.serverData.assignSeat(assignmentData);
+            }
+            
+            // Remove any previous assignment
+            if (user.assignedObject) {
+                user.assignedObject.assignedUser = null;
+                user.assignedObject.updateVisualState();
+            }
+            
+            if (desk.assignedUser) {
+                desk.assignedUser.assignedObject = null;
+            }
+            
+            // Create new assignment
+            desk.assignUser(user);
+            user.assignedObject = desk;
+            
+            // Update UI
+            this.updatePropertiesPanel();
+            this.app.canvas2d.renderAll();
+            
+            // Hide loading indicator
+            this.hideLoading();
+            this.showSuccess('User assigned successfully');
+        } catch (error) {
+            console.error('Failed to assign user:', error);
+            this.hideLoading();
+            this.showError('Failed to assign user: ' + error.message);
+            
+            // Still update the UI for better UX even if the server call failed
+            if (user.assignedObject) {
+                user.assignedObject.assignedUser = null;
+                user.assignedObject.updateVisualState();
+            }
+            
+            if (desk.assignedUser) {
+                desk.assignedUser.assignedObject = null;
+            }
+            
+            desk.assignUser(user);
+            user.assignedObject = desk;
+            this.updatePropertiesPanel();
+            this.app.canvas2d.renderAll();
         }
-        
-        if (desk.assignedUser) {
-            desk.assignedUser.assignedObject = null;
-        }
-        
-        // Create new assignment
-        desk.assignUser(user);
-        user.assignedObject = desk;
-        
-        // Update UI
-        this.updatePropertiesPanel();
-        this.app.canvas2d.renderAll();
     }
     
-    removeAssignment(desk) {
-        if (desk.assignedUser) {
-            desk.assignedUser.assignedObject = null;
+    async removeAssignment(desk) {
+        if (!desk.assignedUser) return;
+        
+        try {
+            // Start loading indicator
+            this.showLoading('Removing seat assignment...');
+            
+            // Extract seat ID from the desk object
+            const seatIdMatch = desk.id.match(/seat_(\d+)/);
+            let seatId = null;
+            
+            if (seatIdMatch) {
+                seatId = parseInt(seatIdMatch[1]);
+            }
+            
+            // If we have a server connection, use the API to unassign the seat
+            if (this.app.serverData && seatId) {
+                await this.app.serverData.unassignSeat(seatId);
+            }
+            
+            // Update local objects
+            const user = desk.assignedUser;
+            user.assignedObject = null;
             desk.assignedUser = null;
             desk.updateVisualState();
             
             // Update UI
             this.updatePropertiesPanel();
             this.app.canvas2d.renderAll();
+            
+            // Hide loading indicator
+            this.hideLoading();
+            this.showSuccess('User unassigned successfully');
+        } catch (error) {
+            console.error('Failed to remove assignment:', error);
+            this.hideLoading();
+            this.showError('Failed to remove assignment: ' + error.message);
+            
+            // Still update the UI for better UX even if the server call failed
+            const user = desk.assignedUser;
+            user.assignedObject = null;
+            desk.assignedUser = null;
+            desk.updateVisualState();
+            this.updatePropertiesPanel();
+            this.app.canvas2d.renderAll();
         }
     }
     
-    showUserAssignmentModal() {
-        // Create a modal for user selection
+    async showUserAssignmentModal() {
+        // Create modal HTML
         const modal = document.createElement('div');
         modal.className = 'modal';
         modal.innerHTML = `
@@ -242,7 +365,7 @@ class SeatAssignmentManager {
                     </select>
                 </div>
                 <div id="modal-user-list" class="modal-user-list">
-                    <!-- Users will be populated here -->
+                    <div class="loading">Loading users...</div>
                 </div>
             </div>
         `;
@@ -259,42 +382,76 @@ class SeatAssignmentManager {
         const departmentFilter = modal.querySelector('#department-filter');
         const userList = modal.querySelector('#modal-user-list');
         
-        // Populate user list
-        this.populateUserList(userList, '', '');
-        
-        // Add search and filter functionality
-        searchInput.addEventListener('input', () => {
-            this.populateUserList(userList, searchInput.value, departmentFilter.value);
-        });
-        
-        departmentFilter.addEventListener('change', () => {
-            this.populateUserList(userList, searchInput.value, departmentFilter.value);
-        });
+        // Load all users
+        try {
+            let users = [];
+            
+            // If we have a server connection, use the API
+            if (this.app.serverData) {
+                users = await this.app.serverData.getUsers();
+            } else {
+                // Use users from app memory
+                users = this.app.users;
+            }
+            
+            // Populate user list
+            this.populateUserList(userList, users, '', '');
+            
+            // Add search and filter functionality
+            searchInput.addEventListener('input', () => {
+                const searchValue = searchInput.value;
+                const filterValue = departmentFilter.value;
+                
+                // Filter users based on search and department
+                const filteredUsers = users.filter(user => {
+                    const matchesSearch = !searchValue || 
+                        (user.name || user.displayName || '').toLowerCase().includes(searchValue.toLowerCase()) ||
+                        (user.email || '').toLowerCase().includes(searchValue.toLowerCase()) ||
+                        (user.id || '').toLowerCase().includes(searchValue.toLowerCase());
+                        
+                    const matchesDepartment = !filterValue || 
+                        (user.department || '').toLowerCase() === filterValue.toLowerCase();
+                    
+                    return matchesSearch && matchesDepartment;
+                });
+                
+                this.populateUserList(userList, filteredUsers, searchValue, filterValue);
+            });
+            
+            departmentFilter.addEventListener('change', () => {
+                const searchValue = searchInput.value;
+                const filterValue = departmentFilter.value;
+                
+                // Filter users based on search and department
+                const filteredUsers = users.filter(user => {
+                    const matchesSearch = !searchValue || 
+                        (user.name || user.displayName || '').toLowerCase().includes(searchValue.toLowerCase()) ||
+                        (user.email || '').toLowerCase().includes(searchValue.toLowerCase()) ||
+                        (user.id || '').toLowerCase().includes(searchValue.toLowerCase());
+                        
+                    const matchesDepartment = !filterValue || 
+                        (user.department || '').toLowerCase() === filterValue.toLowerCase();
+                    
+                    return matchesSearch && matchesDepartment;
+                });
+                
+                this.populateUserList(userList, filteredUsers, searchValue, filterValue);
+            });
+        } catch (error) {
+            console.error('Failed to load users:', error);
+            userList.innerHTML = '<div class="error">Failed to load users. Please try again.</div>';
+        }
     }
     
-    populateUserList(container, searchQuery, departmentFilter) {
+    populateUserList(container, users, searchQuery, departmentFilter) {
         container.innerHTML = '';
-
-        console.log('users:',this.app.users);
         
-        // Filter users based on search query and department
-        const filteredUsers = this.app.users.filter(user => {
-            const matchesSearch = !searchQuery || 
-                user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                user.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                user.email.toLowerCase().includes(searchQuery.toLowerCase());
-                
-            const matchesDepartment = !departmentFilter || user.department === departmentFilter;
-            
-            return matchesSearch && matchesDepartment;
-        });
-        
-        if (filteredUsers.length === 0) {
+        if (!users || users.length === 0) {
             container.innerHTML = '<div class="no-results">No users found</div>';
             return;
         }
         
-        filteredUsers.forEach(user => {
+        users.forEach(user => {
             const userItem = document.createElement('div');
             userItem.className = 'modal-user-item';
             
@@ -302,14 +459,18 @@ class SeatAssignmentManager {
             const assignedIcon = user.assignedObject ? 
                 '<span class="assigned-icon" title="User already assigned">⚠️</span>' : '';
             
+            // Determine user name (handle different property names)
+            const userName = user.name || user.displayName || user.email || 'Unknown User';
+            
             userItem.innerHTML = `
                 <div class="modal-user-avatar">
-                    <img src="${user.photoUrl}" alt="${user.name}">
+                    <img src="${user.photoUrl || 'images/default-user.png'}" alt="${userName}" 
+                         onerror="this.src='images/default-user.png'">
                 </div>
                 <div class="modal-user-details">
-                    <div class="modal-user-name">${user.name} ${assignedIcon}</div>
-                    <div class="modal-user-email">${user.email}</div>
-                    <div class="modal-user-dept">${user.department}</div>
+                    <div class="modal-user-name">${userName} ${assignedIcon}</div>
+                    <div class="modal-user-email">${user.email || 'No email'}</div>
+                    <div class="modal-user-dept">${user.department || 'No Department'}</div>
                 </div>
             `;
             
@@ -328,5 +489,55 @@ class SeatAssignmentManager {
             
             container.appendChild(userItem);
         });
+    }
+    
+    // Helper methods for UI loading/notifications
+    showLoading(message) {
+        let loader = document.querySelector('.loading-indicator');
+        if (!loader) {
+            loader = document.createElement('div');
+            loader.className = 'loading-indicator';
+            loader.innerHTML = `
+                <div class="loading-spinner"></div>
+                <div class="loading-message">${message}</div>
+            `;
+            document.body.appendChild(loader);
+        } else {
+            loader.querySelector('.loading-message').textContent = message;
+            loader.style.display = 'flex';
+        }
+    }
+    
+    hideLoading() {
+        const loader = document.querySelector('.loading-indicator');
+        if (loader) {
+            loader.style.display = 'none';
+        }
+    }
+    
+    showError(message) {
+        this.showNotification(message, 'error');
+    }
+    
+    showSuccess(message) {
+        this.showNotification(message, 'success');
+    }
+    
+    showNotification(message, type = 'info') {
+        let notification = document.querySelector('.notification');
+        if (!notification) {
+            notification = document.createElement('div');
+            notification.className = 'notification';
+            document.body.appendChild(notification);
+        }
+        
+        notification.textContent = message;
+        notification.className = `notification ${type}`;
+        notification.style.display = 'block';
+        
+        // Hide after 3 seconds
+        setTimeout(() => {
+            notification.style.display = 'none';
+        }, 3000);
     }
 }
