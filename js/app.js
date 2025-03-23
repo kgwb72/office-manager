@@ -416,7 +416,7 @@ class App {
                     this.startPoint.x,
                     this.startPoint.y,
                     width,
-                    10 // Fixed height for horizontal wall
+                    10, // Fixed height for horizontal wall
                 );
                 
                 // Reset wall drawing state
@@ -647,8 +647,9 @@ class App {
         if (!this.canvas2d) return null;
         
         try {
-            const endX = width;
-            const endY = height;
+            const pointer = this.canvas2d.getPointer(event ? event.e : window.event);
+            const endX = pointer.x;
+            const endY = pointer.y;
             
             // Calculate wall dimensions and position
             const wallWidth = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
@@ -659,8 +660,9 @@ class App {
             
             // Calculate rotation angle in degrees
             const angle = Math.atan2(endY - startY, endX - startX) * (180 / Math.PI);
+            console.log('Wall angle:', angle,endX,endY,startX,startY);
             
-            const position = { x: midX, y: 0, z: midY };
+            const position = { x: midX, y: midY, z: midY };
             const dimensions = { 
                 width: wallWidth,
                 height: options.height || 250, 
@@ -668,17 +670,17 @@ class App {
             };
             options.angle = angle;
             
-            // Create wall
+        
             const rotationObj = { 
                 x: 0, 
-                y: (options.angle || 0) * Math.PI / 180, 
+                y: angle * Math.PI / 180, 
                 z: 0 
             };
             
             const wallOptions = {
                 ...options,
                 thickness: options.thickness || 10,
-                color: options.color || '#e8e8e8'
+                color: options.color || '#414141'
             };
             
             // Create and add the wall
