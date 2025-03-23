@@ -202,15 +202,15 @@ class App {
             
             if (!obj) return;
             
-            // Handle wall endpoint snapping during movement
-            if (obj.type === 'rect' && obj.officeObject && obj.officeObject.type === 'wall') {
-                this.handleWallMovementSnapping(obj);
-            }
+            // // Handle wall endpoint snapping during movement
+            // if (obj.type === 'rect' && obj.officeObject && obj.officeObject.type === 'wall') {
+            //     this.handleWallMovementSnapping(obj);
+            // }
             
-            // Handle object-to-wall snapping
-            if (obj.officeObject && (obj.officeObject.type === 'desk' || obj.officeObject.type === 'deskWithChair')) {
-                this.handleObjectToWallSnapping(obj);
-            }
+            // // Handle object-to-wall snapping
+            // if (obj.officeObject && (obj.officeObject.type === 'desk' || obj.officeObject.type === 'deskWithChair')) {
+            //     this.handleObjectToWallSnapping(obj);
+            // }
             
             // Apply grid snapping if Ctrl is pressed (for all objects)
             if (this.keyboardCtrl) {
@@ -222,17 +222,23 @@ class App {
         this.canvas2d.on('object:rotating', (e) => {
             const obj = e.target;
             
-            // Only apply to furniture objects
-            if (obj.officeObject && (obj.officeObject.type === 'desk' || obj.officeObject.type === 'deskWithChair')) {
-                if (this.checkObjectWallCollision(obj)) {
-                    // Revert to previous rotation if collision detected
-                    obj.angle = obj.lastRotation || 0;
-                    this.canvas2d.renderAll();
-                } else {
-                    // Store last valid rotation
-                    obj.lastRotation = obj.angle;
-                }
+            // Apply rotation snapping if Ctrl is pressed
+            if (this.keyboardCtrl) {
+                const snapAngle = 15; // Snap to 15-degree increments
+                obj.angle = Math.round(obj.angle / snapAngle) * snapAngle;
             }
+
+            // // Only apply to furniture objects
+            // if (obj.officeObject && (obj.officeObject.type === 'desk' || obj.officeObject.type === 'deskWithChair')) {
+            //     if (this.checkObjectWallCollision(obj)) {
+            //         // Revert to previous rotation if collision detected
+            //         obj.angle = obj.lastRotation || 0;
+            //         this.canvas2d.renderAll();
+            //     } else {
+            //         // Store last valid rotation
+            //         obj.lastRotation = obj.angle;
+            //     }
+            // }
         });
 
         // Object modification event handler
@@ -241,16 +247,16 @@ class App {
             if (!obj) return;
             
             // Perform final position checks and adjustments
-            if (obj.officeObject && (obj.officeObject.type === 'desk' || obj.officeObject.type === 'deskWithChair')) {
-                // If object still collides with walls after modification, move it to last valid position
-                if (this.checkObjectWallCollision(obj)) {
-                    obj.set({
-                        left: obj.lastValidLeft || obj.left,
-                        top: obj.lastValidTop || obj.top
-                    });
-                    this.canvas2d.renderAll();
-                }
-            }
+            // if (obj.officeObject && (obj.officeObject.type === 'desk' || obj.officeObject.type === 'deskWithChair')) {
+            //     // If object still collides with walls after modification, move it to last valid position
+            //     if (this.checkObjectWallCollision(obj)) {
+            //         obj.set({
+            //             left: obj.lastValidLeft || obj.left,
+            //             top: obj.lastValidTop || obj.top
+            //         });
+            //         this.canvas2d.renderAll();
+            //     }
+            // }
         });
 
         // Mouse move for wall drawing
@@ -259,119 +265,102 @@ class App {
                 const pointer = this.canvas2d.getPointer(e.e);
                 
                 // Try to snap to nearby wall endpoints
-                const snappedPoint = this.keyboardCtrl ? 
-                    this.findNearestWallEndpoint(pointer) : pointer;
+                // const snappedPoint = this.keyboardCtrl ? 
+                //     this.findNearestWallEndpoint(pointer) : pointer;
                 
                 // Calculate width and height based on start and current point
-                const width = Math.abs(snappedPoint.x - this.startPoint.x);
-                const height = Math.abs(snappedPoint.y - this.startPoint.y);
+                const width = Math.abs(pointer.x - this.startPoint.x);
+                const height = Math.abs(pointer.y - this.startPoint.y);
                 
-                // Determine if wall is horizontal or vertical based on which dimension is larger
-                let isHorizontal = width > height;
+                // // Determine if wall is horizontal or vertical based on which dimension is larger
+                // let isHorizontal = width > height;
                 
-                if (isHorizontal) {
-                    // For horizontal wall, keep height fixed and adjust width
-                    this.tempWall.set({
-                        width: width,
-                        height: 10, // Fixed height for horizontal wall
-                        left: Math.min(this.startPoint.x, snappedPoint.x) + width/2,
-                        top: this.startPoint.y
-                    });
-                } else {
-                    // For vertical wall, keep width fixed and adjust height
-                    this.tempWall.set({
-                        width: 10, // Fixed width for vertical wall
-                        height: height,
-                        left: this.startPoint.x,
-                        top: Math.min(this.startPoint.y, snappedPoint.y) + height/2
-                    });
-                }
+                
                 
                 this.canvas2d.renderAll();
             }
         });
 
-        // Mouse down for wall drawing start
+        // Mouse down event handler to initiate wall drawing
+        // This sets the starting point for the wall and prepares a temporary visual representation
         this.canvas2d.on('mouse:down', (e) => {
             if (this.activeWallDrawing && !this.drawingWall) {
-                const pointer = this.canvas2d.getPointer(e.e);
-                
-                // Try to snap to wall endpoints if Ctrl is pressed
-                const snappedPoint = this.keyboardCtrl ? 
-                    this.findNearestWallEndpoint(pointer) : pointer;
-                
-                this.startPoint = { x: snappedPoint.x, y: snappedPoint.y };
-                this.drawingWall = true;
-                
-                // Create a temporary wall visualization
-                this.tempWall = new fabric.Rect({
-                    left: this.startPoint.x,
-                    top: this.startPoint.y,
-                    width: 1,
-                    height: 1,
-                    fill: '#e8e8e8',
-                    stroke: '#333',
-                    strokeWidth: 1,
-                    selectable: false,
-                    evented: false
-                });
-                
-                this.canvas2d.add(this.tempWall);
+            const pointer = this.canvas2d.getPointer(e.e);
+            
+            // Try to snap to wall endpoints if Ctrl is pressed
+            // const snappedPoint = this.keyboardCtrl ? 
+            //     this.findNearestWallEndpoint(pointer) : pointer;
+            
+            this.startPoint = { x: pointer.x, y: pointer.y };
+            this.drawingWall = true;
+            
+            // Create a temporary wall visualization
+            this.tempWall = new fabric.Rect({
+                left: this.startPoint.x,
+                top: this.startPoint.y,
+                width: 1,
+                height: 1,
+                fill: '#e8e8e8',
+                stroke: '#333',
+                strokeWidth: 1,
+                selectable: false,
+                evented: false
+            });
+            
+            this.canvas2d.add(this.tempWall);
+            } else if (this.activeWallDrawing && this.drawingWall) {
+            const pointer = this.canvas2d.getPointer(e.e);
+            
+            // Try to snap to wall endpoints if Ctrl is pressed
+            // const endPoint = this.keyboardCtrl ? 
+            //     this.findNearestWallEndpoint(pointer) : pointer;
+            
+            // Remove the temporary visual wall
+            this.canvas2d.remove(this.tempWall);
+            
+            // Calculate width and height
+            const width = Math.abs(pointer.x - this.startPoint.x);
+            const height = Math.abs(pointer.y - this.startPoint.y);
+            
+            this.addWall(
+                'wall_' + Date.now(),
+                this.startPoint.x,
+                this.startPoint.y,
+                width,
+                10 // Fixed height for horizontal wall
+            );
+            // Reset wall drawing state
+            this.drawingWall = false;
+            this.startPoint = null;
+            this.tempWall = null;
+            
+            // Switch back to select tool after drawing to allow the user to interact with the newly created wall
+            if (this.activeWallDrawing) {
+                this.activeWallDrawing = false;
+                this.activateTool('select');
+            }
             }
         });
 
-        // Mouse up for wall drawing end
-        this.canvas2d.on('mouse:up', (e) => {
+        // Mouse move for wall drawing preview
+        this.canvas2d.on('mouse:move', (e) => {
             if (this.drawingWall && this.startPoint && this.tempWall) {
-                const pointer = this.canvas2d.getPointer(e.e);
-                
-                // Try to snap to wall endpoints if Ctrl is pressed
-                const endPoint = this.keyboardCtrl ? 
-                    this.findNearestWallEndpoint(pointer) : pointer;
-                
-                // Remove the temporary visual wall
-                this.canvas2d.remove(this.tempWall);
-                
-                // Calculate width and height
-                const width = Math.abs(endPoint.x - this.startPoint.x);
-                const height = Math.abs(endPoint.y - this.startPoint.y);
-                
-                // Only create wall if it has some meaningful size
-                if (width > 5 || height > 5) {
-                    // Determine if wall is horizontal or vertical based on which dimension is larger
-                    const isHorizontal = width > height;
-                    
-                    if (isHorizontal) {
-                        // Create a horizontal wall
-                        this.addWall(
-                            'wall_' + Date.now(),
-                            Math.min(this.startPoint.x, endPoint.x) + width/2,
-                            this.startPoint.y,
-                            width,
-                            10 // Fixed height for horizontal wall
-                        );
-                    } else {
-                        // Create a vertical wall
-                        this.addWall(
-                            'wall_' + Date.now(), 
-                            this.startPoint.x,
-                            Math.min(this.startPoint.y, endPoint.y) + height/2,
-                            10, // Fixed width for vertical wall
-                            height
-                        );
-                    }
-                }
-                
-                // Reset drawing state
-                this.drawingWall = false;
-                this.startPoint = null;
-                this.tempWall = null;
-                
-                // Switch back to select tool after drawing
-                if (this.activeWallDrawing) {
-                    this.activeWallDrawing = false;
-                    this.activateTool('select');
-                }
+            const pointer = this.canvas2d.getPointer(e.e);
+            
+            // // Try to snap to nearby wall endpoints
+            // const snappedPoint = this.keyboardCtrl ? 
+            //     this.findNearestWallEndpoint(pointer) : pointer;
+            
+            // Calculate width and height based on start and current point
+            const width = Math.abs(pointer.x - this.startPoint.x);
+            const height = Math.abs(pointer.y - this.startPoint.y);
+            
+            // Determine if wall is horizontal or vertical based on which dimension is larger
+            let isHorizontal = width > height;
+            
+            
+            
+            this.canvas2d.renderAll();
             }
         });
     }
@@ -614,13 +603,13 @@ class App {
         obj.lastValidTop = obj.top;
         
         // Check for collision with walls
-        if (this.checkObjectWallCollision(obj)) {
-            // If collision detected, push object away from wall
-            this.pushObjectFromWalls(obj, walls);
-        } else {
-            // No collision, try to snap to nearby walls
-            this.snapObjectToNearbyWalls(obj, walls);
-        }
+        // if (this.checkObjectWallCollision(obj)) {
+        //     // If collision detected, push object away from wall
+        //     this.pushObjectFromWalls(obj, walls);
+        // } else {
+        //     // No collision, try to snap to nearby walls
+        //     this.snapObjectToNearbyWalls(obj, walls);
+        // }
     }
     
     /**
@@ -791,31 +780,31 @@ class App {
         }
     }
     
-    /**
-     * Check if two rectangles overlap vertically
-     * @param {Object} rect1 - First rectangle
-     * @param {Object} rect2 - Second rectangle
-     * @returns {boolean} True if rectangles overlap vertically
-     */
-    verticalOverlap(rect1, rect2) {
-        return !(
-            rect1.top + rect1.height <= rect2.top ||
-            rect2.top + rect2.height <= rect1.top
-        );
-    }
+    // /**
+    //  * Check if two rectangles overlap vertically
+    //  * @param {Object} rect1 - First rectangle
+    //  * @param {Object} rect2 - Second rectangle
+    //  * @returns {boolean} True if rectangles overlap vertically
+    //  */
+    // verticalOverlap(rect1, rect2) {
+    //     return !(
+    //         rect1.top + rect1.height <= rect2.top ||
+    //         rect2.top + rect2.height <= rect1.top
+    //     );
+    // }
     
-    /**
-     * Check if two rectangles overlap horizontally
-     * @param {Object} rect1 - First rectangle
-     * @param {Object} rect2 - Second rectangle
-     * @returns {boolean} True if rectangles overlap horizontally
-     */
-    horizontalOverlap(rect1, rect2) {
-        return !(
-            rect1.left + rect1.width <= rect2.left ||
-            rect2.left + rect2.width <= rect1.left
-        );
-    }
+    // /**
+    //  * Check if two rectangles overlap horizontally
+    //  * @param {Object} rect1 - First rectangle
+    //  * @param {Object} rect2 - Second rectangle
+    //  * @returns {boolean} True if rectangles overlap horizontally
+    //  */
+    // horizontalOverlap(rect1, rect2) {
+    //     return !(
+    //         rect1.left + rect1.width <= rect2.left ||
+    //         rect2.left + rect2.width <= rect1.left
+    //     );
+    // }
     
     /**
      * Snap an object to the grid
@@ -957,15 +946,15 @@ class App {
         // Determine if this is a point-to-point wall drawing or dimensions-based
         let position, dimensions;
         
-        if (typeof width === 'number' && typeof height === 'number') {
-            // Dimensions-based wall
-            position = { x: startX, y: 0, z: startY };
-            dimensions = { 
-                width: width,
-                height: options.height || 250, 
-                depth: height 
-            };
-        } else {
+        // if (typeof width === 'number' && typeof height === 'number') {
+        //     // Dimensions-based wall
+        //     position = { x: startX, y: 0, z: startY };
+        //     dimensions = { 
+        //         width: width,
+        //         height: options.height || 250, 
+        //         depth: height 
+        //     };
+        // } else {
             // Point-to-point wall drawing (endX = width, endY = height)
             const endX = width;
             const endY = height;
@@ -987,7 +976,7 @@ class App {
                 depth: options.thickness || 10 
             };
             options.angle = angle;
-        }
+        // }
         
         // Create wall
         const rotationObj = { 
@@ -1141,15 +1130,15 @@ class App {
                         this.objects.push(deskWithChair);
                     }
                     
-                    // Check for collision with walls
-                    const fabricObj = deskWithChair.fabricObject;
-                    if (fabricObj && this.checkObjectWallCollision(fabricObj)) {
-                        this.canvas2d.remove(fabricObj);
-                        this.objects.pop(); // Remove from objects array
+                    // // Check for collision with walls
+                    // const fabricObj = deskWithChair.fabricObject;
+                    // if (fabricObj && this.checkObjectWallCollision(fabricObj)) {
+                    //     this.canvas2d.remove(fabricObj);
+                    //     this.objects.pop(); // Remove from objects array
                         
-                        // Show error feedback
-                        this.showPlacementError(x, y);
-                    }
+                    //     // Show error feedback
+                    //     this.showPlacementError(x, y);
+                    // }
                     
                     // Remove this event handler after first use
                     this.canvas2d.off('mouse:down', addDeskChairHandler);

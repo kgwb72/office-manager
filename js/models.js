@@ -726,7 +726,7 @@ class Wall extends OfficeObject {
     const halfDepth = this.dimensions.depth / 2;
     const angle = this.rotation.y;
     
-    // Define corners relative to center
+    // Define corners relative to center (clockwise from top-left)
     const corners = [
       { x: -halfWidth, y: -halfDepth },
       { x: halfWidth, y: -halfDepth },
@@ -743,9 +743,16 @@ class Wall extends OfficeObject {
       // Apply position offset
       return {
         x: rotatedX + this.position.x,
-        y: rotatedY + this.position.z // Use z for 2D top
+        y: rotatedY + this.position.z, // Use z for 2D top
+        z: this.position.y // Include z coordinate for 3D calculations
       };
     });
+    
+    // Store wall line segment (for collision detection)
+    this.wallLine = {
+      start: this.endpoints[0],
+      end: this.endpoints[1]
+    };
   }
   
   createFabricObject(canvas) {
