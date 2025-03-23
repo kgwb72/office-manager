@@ -1,5 +1,3 @@
-// services/serverDataService.js
-
 class ServerDataService {
     constructor() {
         this.apiBaseUrl = 'https://localhost:44317/api';
@@ -21,6 +19,7 @@ class ServerDataService {
         }
         
         try {
+            console.log(`Making API request to: ${url}`, options.method || 'GET');
             const response = await fetch(url, {
                 ...options,
                 headers
@@ -28,6 +27,7 @@ class ServerDataService {
             
             if (!response.ok) {
                 const errorText = await response.text();
+                console.error(`API error (${response.status}): ${errorText}`);
                 throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorText}`);
             }
             
@@ -271,6 +271,7 @@ class ServerDataService {
     }
 }
 
-// Create a singleton instance
+// Create a singleton instance and expose it to the global window
 const serverDataService = new ServerDataService();
-export default serverDataService;
+console.log('ServerDataService instance created:', serverDataService);
+window.serverDataService = serverDataService;

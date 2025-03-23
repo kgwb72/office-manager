@@ -1,3 +1,4 @@
+
 /**
  * Main Application Controller
  * Handles initialization and coordination between different parts of the application
@@ -88,13 +89,29 @@ class App {
         this.authService.useMock = this.config.useMockAuth;
         
         // Initialize server data service
-        this.serverData = new ServerDataService();
+        this.serverData = window.serverDataService;
         this.serverData.apiBaseUrl = this.config.apiUrl;
         
         // Set up authentication token if user is logged in
         const userInfo = await this.authService.getUserInfo();
         if (userInfo && userInfo.token) {
             this.serverData.setAuthToken(userInfo.token);
+        }else {
+            // Auto-login for development purposes
+            // You can remove this in production
+            try {
+                const loginResult = await this.serverData.login({
+                    email: "admin@example.com",  // Use your admin credentials
+                    password: "YourPassword123"  // Use your admin password
+                });
+                
+                if (loginResult && loginResult.token) {
+                    this.serverData.setAuthToken(loginResult.token);
+                    console.log("Auto-login successful");
+                }
+            } catch (error) {
+                console.error("Auto-login failed:", error);
+            }
         }
         
         // Add event listeners for login/logout buttons
